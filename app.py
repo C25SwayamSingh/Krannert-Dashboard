@@ -1017,24 +1017,38 @@ def main() -> None:
     st.set_page_config(page_title="Krannert Dashboard", layout="wide")
     st.title("Krannert Dashboard")
 
-    # Data source
-    st.sidebar.header("Data source")
-    uploaded = st.sidebar.file_uploader("Upload a CSV", type=["csv"])
-    local_path = st.sidebar.text_input(
-        "Or load from local path",
-        value=str(DEFAULT_DATA_PATH),
-        help="Relative or absolute path to a CSV (default points to ./data).",
-    )
+    # Data source - clearer UI for preloaded data + optional updates
+    st.sidebar.header("📊 Data Source")
+    
+    # Check if preloaded data exists
+    has_preloaded = DEFAULT_DATA_PATH.exists()
+    
+    if has_preloaded:
+        st.sidebar.success("✅ **Data preloaded** — Ready to explore!")
+        st.sidebar.caption("Using: `sales_2016_2026_combined.csv`")
+        
+        # Expander for optional update
+        with st.sidebar.expander("🔄 Upload updated data (optional)"):
+            st.markdown("Upload a new CSV to replace the current dataset. "
+                       "The file should have the same columns.")
+            uploaded = st.file_uploader("Drop new CSV here", type=["csv"], key="csv_upload")
+    else:
+        st.sidebar.warning("⚠️ No data file found")
+        st.sidebar.markdown("Upload your sales CSV to get started:")
+        uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="csv_upload")
+    
+    # Hidden local path input (for advanced users)
+    local_path = str(DEFAULT_DATA_PATH)
 
     df, source_label = load_dataset(uploaded, local_path)
     if df is None:
         has_local = any(DATA_DIR.glob("*.csv"))
         if uploaded is None and not has_local:
-            st.info("No CSV detected; showing synthetic sample data for preview.")
+            st.info("📋 No CSV detected — showing synthetic sample data for preview.")
             df = data_prep.make_fake_data()
             source_label = "Synthetic sample data"
         else:
-            st.info("Provide a CSV via upload or local path to explore performance.")
+            st.info("📁 Provide a CSV via upload to explore performance.")
             return
 
     # -------------------------------------------------------------------------
