@@ -1,0 +1,17 @@
+# Environments
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Streamlit cache
+.streamlit/
+
+# OS/IDE noise
+.DS_Store
+.idea/
+.vscode/
+

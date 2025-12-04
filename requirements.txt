@@ -1,0 +1,8 @@
+streamlit>=1.39
+pandas>=2.1
+numpy>=1.26
+plotly>=5.18
+scipy>=1.11
+python-dateutil>=2.9
+kaleido>=0.2.1
+
