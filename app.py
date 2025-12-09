@@ -116,6 +116,10 @@ def inject_styles() -> None:
             color: #6b625a;
             font-size: 13px;
         }
+        /* Hide Streamlit settings (theme chooser) to keep a single enforced theme */
+        div[data-testid="stToolbar"] button[title="Settings"] {
+            display: none !important;
+        }
         /* Compact, readable help list */
         .help-list {
             margin: 0.25rem 0 0.5rem 0;
