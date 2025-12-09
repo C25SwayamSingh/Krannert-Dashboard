@@ -253,18 +253,15 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
 
     df = _prep(df_raw, today)
 
-    # New column names (with Type and Expected total for context)
     empty_cols = [
         "event",
-        "event_type_label",
         "days_out",
-        "tickets_sold",
-        "expected_total",
         "sold_so_far_pct",
-        "typical_pct",
+        "typical_at_day_pct",
         "gap_pp",
+        "tickets_so_far",
         "status",
-        "comparison_group",
+        "cohort",
     ]
 
     if df.empty:
@@ -305,7 +302,8 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
 
         # Guard rails
         baseline_final = max(baseline_final, 1.0)
-        cum_now = np.clip(100.0 * r["tickets_so_far"] / baseline_final, 0, 100)
+        tickets_so_far = float(r["tickets_so_far"])
+        cum_now = np.clip(100.0 * tickets_so_far / baseline_final, 0, 100)
         gap = cum_now - median_at_d
         status = pace_status(gap)
 
@@ -319,15 +317,13 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
         rows.append(
             {
                 "event": r["event_label"] if pd.notna(r["event_label"]) else r["event_name"],
-                "event_type_label": r.get("event_type", "Unknown"),
                 "days_out": int(r["days_out"]),
-                "tickets_sold": int(r["tickets_so_far"]),
-                "expected_total": int(round(baseline_final)),
                 "sold_so_far_pct": round(cum_now, 1),
-                "typical_pct": round(median_at_d, 1),
+                "typical_at_day_pct": round(median_at_d, 1),
                 "gap_pp": round(gap, 1),
+                "tickets_so_far": int(round(tickets_so_far)),
                 "status": status,
-                "comparison_group": cohort_label,
+                "cohort": cohort_label,
             }
         )
 

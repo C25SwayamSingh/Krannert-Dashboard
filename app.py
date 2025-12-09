@@ -36,6 +36,109 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
+def inject_styles() -> None:
+    """Inject global CSS for the warm, minimal theme."""
+    st.markdown(
+        """
+        <style>
+        /* Global layout */
+        .block-container {
+            max-width: 1300px;
+            padding-top: 1.5rem;
+            padding-bottom: 3rem;
+        }
+        body {
+            background: #F4EEE6;
+            color: #1F1A17;
+        }
+        .stApp {
+            background: #F4EEE6;
+        }
+        /* Cards */
+        .card {
+            background: #FFFFFF;
+            border-radius: 14px;
+            padding: 14px 18px 12px;
+            box-shadow: 0 2px 6px rgba(47,42,36,0.06);
+            border: 1px solid rgba(47,42,36,0.08);
+            margin-bottom: 12px;
+        }
+        .card h3, .card h4, .card h5 {
+            margin-top: 0.1rem;
+        }
+        /* KPI tiles */
+        .kpi-card {
+            padding: 14px 16px 12px;
+        }
+        .kpi-label {
+            font-size: 12px;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: #5b524a;
+            margin-bottom: 2px;
+        }
+        .kpi-value {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 2px;
+            color: #1F1A17;
+        }
+        .kpi-delta {
+            font-size: 12px;
+            color: #6b625a;
+        }
+        /* Buttons */
+        .primary-btn button, .primary-btn>button {
+            background: #2F2A24 !important;
+            color: #FFFFFF !important;
+            border-radius: 999px !important;
+            border: 1px solid #2F2A24 !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .primary-btn button:hover { transform: translateY(-1px); }
+        .ghost-btn button, .ghost-btn>button {
+            background: transparent !important;
+            color: #2F2A24 !important;
+            border-radius: 999px !important;
+            border: 1px solid rgba(47,42,36,0.3) !important;
+        }
+        /* Badges & helper text */
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #F4EEE6;
+            border: 1px solid rgba(47,42,36,0.12);
+            color: #2F2A24;
+            font-size: 11px;
+        }
+        .muted {
+            color: #6b625a;
+            font-size: 13px;
+        }
+        /* Compact, readable help list */
+        .help-list {
+            margin: 0.25rem 0 0.5rem 0;
+            padding-left: 1.0rem;
+            line-height: 1.6;
+            color: var(--text-color, #1F1A17);
+            font-size: 14px;
+        }
+        .help-list li {
+            margin: 0.2rem 0;
+        }
+        /* Keep expander body aligned with card style */
+        [data-testid="stExpander"] .streamlit-expanderContent {
+            background: rgba(255,255,255,0.6);
+            border-radius: 10px;
+            padding: 0.5rem 0.75rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _format_int(value: float | int | None) -> str:
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return "–"
@@ -69,11 +172,24 @@ def load_dataset(uploaded_file, local_path: str | Path) -> tuple[pd.DataFrame | 
     if not path.exists():
         st.warning(f"Local CSV not found at {path}. Update the path or upload a file.")
         return None, str(path)
+
     try:
         return data_prep.load_csv(path), str(path)
     except Exception as exc:
         st.error(f"Unable to read {path}: {exc}")
         return None, str(path)
+
+
+def render_hero(preloaded_path: Path) -> None:
+    """Hero section with minimal copy; uploads handled in sidebar."""
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Krannert Sales Insights")
+    st.markdown(
+        '<div class="muted">Track booking pace, heatmap demand, and pre/post shifts. '
+        "Use the sidebar to swap CSVs.</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +337,7 @@ def render_kpis(kpis: dict) -> None:
     delta_display = None
     if kpis["delta_30d"] is not None:
         delta_display = _format_percent(kpis["delta_30d"] * 100)
+
     col1.metric("Tickets last 30 days", _format_int(kpis["tickets_30d"]), delta=delta_display)
     col2.metric("Avg price last 30 days", _format_currency(kpis["avg_price_30d"]))
     col3.metric("Open events next 30 days", _format_int(kpis["open_events"]))
@@ -232,16 +349,21 @@ def render_kpis(kpis: dict) -> None:
 # ---------------------------------------------------------------------------
 def render_watchlist(watch_table: pd.DataFrame, fallback_tiers: set, filters_summary: str) -> None:
     """Render the event pacing watchlist with Plotly table for visibility."""
-    st.subheader(f"📊 Event Pacing Watchlist (next {pacing.D_MAX} days)")
-    
-    # Column explanations with plain-English descriptions
-    with st.expander("ℹ️ What do these columns mean?"):
-        st.markdown("""
-- **Sold so far (%)** = tickets sold so far / typical final total
-- **Typical at this day (%)** = what similar past shows had sold at the same days-out
-- **Gap vs typical (pp)** = Sold so far − Typical; negative means behind
-- **Status** = 🚨 Behind (≤ −5 pp) · 🟨 On pace (−5..+5 pp) · ✅ Ahead (≥ +5 pp)
-        """)
+    with st.expander("What do these columns mean?"):
+        st.markdown(
+            """
+<ul class="help-list">
+  <li><b>Days-out</b>: Days until the event (e.g., 45 = event is 45 days away).</li>
+  <li><b>Sold so far (%)</b>: 100 × Tickets so far ÷ Typical final total. Typical final total = median final tickets for similar past events in the cohort (the denominator).</li>
+  <li><b>Typical at this day (%)</b>: Median sell-through for similar past events at the same days-out.</li>
+  <li><b>Gap vs typical (pp)</b>: Sold so far (%) − Typical at this day (%) in percentage points. Negative = behind; positive = ahead.</li>
+  <li><b>Tickets so far</b>: Raw ticket count sold to date.</li>
+  <li><b>Status</b>: Ahead / On pace / Behind (On-pace band = −5 to +5 pp).</li>
+  <li><b>Cohort</b>: Comparison group used (event type; event type + weekday/+venue; or global when history is thin).</li>
+</ul>
+            """,
+            unsafe_allow_html=True,
+        )
     
     st.caption(filters_summary)
 
@@ -249,98 +371,89 @@ def render_watchlist(watch_table: pd.DataFrame, fallback_tiers: set, filters_sum
         st.info("No upcoming events in the next 120 days, or not enough historical data to compute pacing benchmarks.")
         return
 
-    # Cohort badge
     if fallback_tiers:
         tiers = {pacing.TIER_LABELS.get(t, t) for t in fallback_tiers}
         st.caption(f"Cohort used: {', '.join(sorted(tiers))}")
 
-    # Column order: Event, Type, Days, Tickets sold, Expected total, Sold %, Typical %, Gap, Status
+    # Column order and configs
     display_cols = [
         "event",
-        "event_type_label",
         "days_out",
-        "tickets_sold",
-        "expected_total",
         "sold_so_far_pct",
-        "typical_pct",
+        "typical_at_day_pct",
         "gap_pp",
+        "tickets_so_far",
         "status",
+        "cohort",
     ]
     display = watch_table[[c for c in display_cols if c in watch_table.columns]].copy()
-    display = display.rename(
-        columns={
-            "event": "Event",
-            "event_type_label": "Type",
-            "days_out": "Days out",
-            "tickets_sold": "Tickets sold",
-            "expected_total": "Expected total",
-            "sold_so_far_pct": "Sold so far (%)",
-            "typical_pct": "Typical at this day (%)",
-            "gap_pp": "Gap vs typical (pp)",
-            "status": "Status",
-        }
-    )
-    
-    # Format numeric columns for display
-    if "tickets_sold" in display.columns:
-        display["tickets_sold"] = display["tickets_sold"].apply(lambda x: f"{x:,}")
-    if "expected_total" in display.columns:
-        display["expected_total"] = display["expected_total"].apply(lambda x: f"{x:,}")
-    if "sold_so_far_pct" in display.columns:
-        display["sold_so_far_pct"] = display["sold_so_far_pct"].apply(lambda x: f"{x:.1f}%")
-    if "typical_pct" in display.columns:
-        display["typical_pct"] = display["typical_pct"].apply(lambda x: f"{x:.1f}%")
-    if "gap_pp" in display.columns:
-        display["gap_pp"] = display["gap_pp"].apply(lambda x: f"{x:+.1f}" if pd.notna(x) else "–")
-    
-    # Color-code rows by status
-    row_colors = []
-    for status in watch_table["status"]:
+
+    # Color palette for status
+    def status_color(status: str) -> str:
         if status == "Behind":
-            row_colors.append("#ffe5e5")  # light red
-        elif status == "Ahead":
-            row_colors.append("#e7f6e7")  # light green
+            return "#ffd6de"  # brighter pink
+        if status == "Ahead":
+            return "#e3f7e3"  # soft green
+        return "#fff7da"      # soft yellow
+
+    # Format values for display
+    fmt = {
+        "days_out": lambda v: f"{v:d}",
+        "sold_so_far_pct": lambda v: f"{v:.1f}%",
+        "typical_at_day_pct": lambda v: f"{v:.1f}%",
+        "gap_pp": lambda v: f"{v:.1f}",
+        "tickets_so_far": lambda v: f"{int(v):,}",
+    }
+    formatted_cols = []
+    for col in display_cols:
+        if col in fmt:
+            formatted_cols.append(display[col].apply(fmt[col]).tolist())
         else:
-            row_colors.append("#fff8dc")  # light yellow
-    
-    # Build Plotly table
+            formatted_cols.append(display[col].tolist())
+
+    # Row-wise colors
+    row_colors = [[status_color(s) for s in display["status"]]] * len(display_cols)
+
     fig = go.Figure(
         data=[
             go.Table(
                 header=dict(
-                    values=[f"<b>{col}</b>" for col in display.columns],
+                    values=[
+                        "<b>Event</b>",
+                        "<b>Days-out</b>",
+                        "<b>Sold so far (%)</b>",
+                        "<b>Typical at this day (%)</b>",
+                        "<b>Gap vs typical (pp)</b>",
+                        "<b>Tickets so far</b>",
+                        "<b>Status</b>",
+                        "<b>Cohort</b>",
+                    ],
                     fill_color="#2c3e50",
                     font=dict(color="white", size=13),
                     align="left",
-                    height=35,
+                    height=32,
                 ),
                 cells=dict(
-                    values=[display[col].tolist() for col in display.columns],
-                    fill_color=[row_colors] * len(display.columns),
-                    font=dict(color="#1a1a1a", size=12),
+                    values=formatted_cols,
+                    fill_color=row_colors,
                     align="left",
+                    font=dict(color="#1a1a1a", size=12),
                     height=30,
                 ),
             )
         ]
     )
-    
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
-        height=min(500, 35 + 30 * len(display) + 20),
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Summary stats
-    behind_count = (watch_table["status"] == "Behind").sum()
-    ahead_count = (watch_table["status"] == "Ahead").sum()
-    on_pace_count = (watch_table["status"] == "On pace").sum()
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("🚨 Behind pace", behind_count, help="Events selling slower than similar past events")
-    col2.metric("🟨 On pace", on_pace_count, help="Events tracking normally vs history")
-    col3.metric("✅ Ahead of pace", ahead_count, help="Events selling faster than usual")
+    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=min(600, 35 + 30 * len(display) + 60))
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+
+    # Summary stats with emojis
+    behind_count = int((watch_table["status"] == "Behind").sum())
+    ahead_count = int((watch_table["status"] == "Ahead").sum())
+    on_pace_count = int((watch_table["status"] == "On pace").sum())
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🔴 Behind pace", behind_count)
+    c2.metric("🟨 On pace", on_pace_count)
+    c3.metric("🟢 Ahead of pace", ahead_count)
 
 
 # ---------------------------------------------------------------------------
@@ -678,13 +791,14 @@ def sales_heatmap_fig_new(df: pd.DataFrame) -> go.Figure | None:
         matrix,
         aspect="auto",
         color_continuous_scale="Blues",
-        title="Sales calendar heatmap (weekday × lead bucket)",
+        title=None,
     )
     fig.update_layout(
         template="plotly_white",
+        title="",
         coloraxis_colorbar_title="Share of sales",
         coloraxis_colorbar_tickformat=".0%",
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin=dict(l=10, r=10, t=20, b=10),
     )
     fig.update_traces(
         hovertemplate="Weekday: %{y}<br>Lead bucket: %{x}<br>Share: %{z:.1%}<extra></extra>",
@@ -912,12 +1026,13 @@ def sales_heatmap_fig(heat_df: pd.DataFrame) -> go.Figure | None:
         matrix,
         aspect="auto",
         color_continuous_scale="Blues",
-        title="Sales calendar heatmap (weekday × lead bucket)",
+        title=None,
     )
     fig.update_layout(
         template="plotly_white",
         coloraxis_colorbar_title="% of weekday tickets",
         coloraxis_colorbar_tickformat=".0%",
+        title="",
     )
     # Numbers on hover only
     fig.update_traces(
@@ -941,9 +1056,12 @@ def checkpoint_summary(table: pd.DataFrame, target_day: int, tolerance: int = 5)
     if matches.empty:
         return None
 
-    weights = matches["tickets_sold"].clip(lower=1)
+    if "tickets_so_far" in matches:
+        weights = matches["tickets_so_far"].clip(lower=1)
+    else:
+        weights = np.ones(len(matches))
     actual = np.average(matches["sold_so_far_pct"], weights=weights)
-    median = np.average(matches["typical_pct"], weights=weights)
+    median = np.average(matches["typical_at_day_pct"], weights=weights)
     gap = actual - median
 
     return {
@@ -1014,8 +1132,11 @@ def render_plot(title: str, fig: go.Figure | None, key: str, subtitle: str | Non
 # Main application
 # ---------------------------------------------------------------------------
 def main() -> None:
-    st.set_page_config(page_title="Krannert Dashboard", layout="wide")
-    st.title("Krannert Dashboard")
+    st.set_page_config(page_title="Krannert Dashboard", layout="wide", initial_sidebar_state="expanded")
+    inject_styles()
+
+    # Hero section (top of page)
+    render_hero(DEFAULT_DATA_PATH)
 
     # Data source - clearer UI for preloaded data + optional updates
     st.sidebar.header("📊 Data Source")
@@ -1031,14 +1152,16 @@ def main() -> None:
         with st.sidebar.expander("🔄 Upload updated data (optional)"):
             st.markdown("Upload a new CSV to replace the current dataset. "
                        "The file should have the same columns.")
-            uploaded = st.file_uploader("Drop new CSV here", type=["csv"], key="csv_upload")
+            uploaded_sidebar = st.file_uploader("Drop new CSV here", type=["csv"], key="csv_upload")
     else:
         st.sidebar.warning("⚠️ No data file found")
         st.sidebar.markdown("Upload your sales CSV to get started:")
-        uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="csv_upload")
+        uploaded_sidebar = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="csv_upload")
     
     # Hidden local path input (for advanced users)
     local_path = str(DEFAULT_DATA_PATH)
+
+    uploaded = uploaded_sidebar
 
     df, source_label = load_dataset(uploaded, local_path)
     if df is None:
@@ -1097,31 +1220,44 @@ def main() -> None:
 
     # KPIs (use as-of date for time-boxed calculations)
     kpis = compute_kpis(base, watch_summary, asof_ts)
+
+    # KPI row
     render_kpis(kpis)
 
-    # Download filtered CSV
+    # Download filtered CSV (ghost style)
     csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download filtered CSV",
-        data=csv_bytes,
-        file_name="krannert_filtered.csv",
-        mime="text/csv",
-        key="filtered_csv",
-    )
+    col_dl, col_note = st.columns([1, 2])
+    with col_dl:
+        st.markdown('<div class="ghost-btn">', unsafe_allow_html=True)
+        st.download_button(
+            "Download snapshot",
+            data=csv_bytes,
+            file_name="krannert_filtered.csv",
+            mime="text/csv",
+            key="filtered_csv",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col_note:
+        st.markdown('<div class="muted">Exports respect your current filters and as-of date.</div>', unsafe_allow_html=True)
 
-    # Watchlist with as-of date context
-    st.info(f"📊 **Watchlist as of {asof_ts:%B %d, %Y}** — Found **{len(watch_table)}** upcoming events within 120 days. "
-            f"Comparing each show's *Sold so far (%)* to what similar shows had by the same lead time.")
-    st.caption("Statuses reflect the current filters on upcoming events; change filters to focus the watchlist. Baseline pacing chart uses a global historical curve for stability.")
+    # --- 1) Event Pacing Watchlist (move back up) ---
+    st.subheader(f"1) 📊 Event Pacing Watchlist (as of {asof_ts:%B %d, %Y})")
+    st.caption(
+        "Statuses reflect the current filters on upcoming events; change filters to focus the watchlist. "
+        "Baseline pacing chart uses a global historical curve for stability."
+    )
     render_watchlist(watch_table, fallback_tiers, filters_summary)
 
-    # Booking window chart (use as-of date) with stable global baseline
-    st.subheader("1) Booking Window Pacing")
-    st.markdown(
-        "- X-axis: days before the event (120→0)\n"
-        "- Y-axis: % of the final tickets sold\n"
-        "- Blue line = typical; band = normal range. If your dashed line sits below blue, you’re behind pace."
-    )
+    # --- 2) Booking Window Pacing ---
+    st.subheader("2) Booking Window Pacing")
+    with st.expander("How to read"):
+        st.markdown(
+            "Typical booking curve across your current filters. If your selection sits below the median at a given day-out, you’re behind pace.\n\n"
+            "- X-axis: days before the event (counts down 120 → 0)\n"
+            "- Y-axis: % of a typical final audience already sold\n"
+            "- Blue line = typical pace; shaded = typical range\n"
+            "- If your selection sits below the line at a given day-out, you’re behind pace."
+        )
 
     mode = "Global"
     baseline_curve, cohort_label, cohort_n = build_baseline_curve(df, asof_ts, filters, mode)
@@ -1132,65 +1268,78 @@ def main() -> None:
     else:
         plotly_config = {"displaylogo": False, "modeBarButtonsToRemove": ["toImage"]}
         pacing_fig = booking_window_fig(baseline_curve, current_curve)
+        pacing_fig.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
         st.plotly_chart(pacing_fig, use_container_width=True, config=plotly_config)
         st.caption(
             f"Baseline: **Global** (n = {cohort_n:,} past events, stable across filters). "
             "Dashed line = current filtered upcoming events (shown only if ≥3 upcoming events)."
         )
 
-    # --- 2) Sales Heatmap (moved up, right after Booking Window Pacing) ---
-    st.markdown("---")
-    st.subheader("2) Sales Timing Heatmap")
-    st.markdown(
-        "- Shows when people buy: by day-of-week and how far out.\n"
-        "- Darker = more of your sales happen there.\n"
-        "- Use it to time email/paid pushes on the strongest days & windows."
-    )
+    # --- 3) Sales Timing Heatmap (directly under booking) ---
+    st.subheader("3) Sales Timing Heatmap")
+    st.caption("Share of weekly sales by weekday × lead bucket. Darker = more of your sales tend to happen there.")
+    no_zoom_config = {
+        "displaylogo": False,
+        "modeBarButtonsToRemove": [
+            "zoom2d",
+            "pan2d",
+            "select2d",
+            "lasso2d",
+            "zoomIn2d",
+            "zoomOut2d",
+            "autoScale2d",
+            "resetScale2d",
+        ],
+    }
+
     fig_heat = sales_heatmap_fig_new(filtered_df)
     if fig_heat is None:
         st.info("Not enough data to show pattern. Try widening seasons or channels.")
     else:
-        st.plotly_chart(fig_heat, use_container_width=True, config={"displaylogo": False})
+        fig_heat.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+        st.plotly_chart(fig_heat, use_container_width=True, config=no_zoom_config)
 
-    # --- 3) Event Mix & Recovery ---
-    # Collab visuals: use FULL dataset (df) for pre/post COVID comparisons
-    # These charts compare historical periods, so filters shouldn't hide them
-    st.markdown("---")
-    st.subheader("3) Event Mix & Recovery")
-    st.caption("These charts use all historical data (ignoring filters) to compare pre-COVID (before Mar 2020) vs post-COVID (after Jul 2021).")
-    
-    plotly_config = {"displaylogo": False}
-    
-    # a) Pre-COVID categories
-    st.markdown("**a) Event categories by attendance (Pre-COVID: before 2020-03-01)**")
+    # --- 4) Event Categories: Pre vs Post COVID ---
+    st.subheader("4) Event Categories: Pre vs Post COVID")
+    st.caption("Average audience size per category before vs after COVID (based on sale date). Pre = Sales Before 03/01/2020; Post = Sales After 07/01/2021.")
+    with st.expander("How to read"):
+        st.markdown(
+            "- Compare category strength before and after COVID.\n"
+            "- Bars show attendance; use to spot recovering or declining categories."
+        )
+    plotly_config = no_zoom_config
     cat_pre = fig_categories_pre(df)
-    if cat_pre is None:
-        st.info("No pre-COVID data to render.")
-    else:
-        st.plotly_chart(cat_pre, use_container_width=True, config=plotly_config)
-    
-    # b) Post-COVID categories
-    st.markdown("**b) Event categories by attendance (Post-COVID: after 2021-07-01)**")
     cat_post = fig_categories_post(df)
-    if cat_post is None:
-        st.info("No post-COVID data to render.")
-    else:
-        st.plotly_chart(cat_post, use_container_width=True, config=plotly_config)
-    
-    # c) Top categories pre vs post
-    st.markdown("**c) Top event categories by attendance (Pre vs Post COVID)**")
     cat_compare = fig_top_categories_pre_post(df, top_n=6)
+    cols_cat = st.columns(2)
+    with cols_cat[0]:
+        if cat_pre is None:
+            st.info("No pre-COVID data to render.")
+        else:
+            cat_pre.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+            st.plotly_chart(cat_pre, use_container_width=True, config=plotly_config)
+    with cols_cat[1]:
+        if cat_post is None:
+            st.info("No post-COVID data to render.")
+        else:
+            cat_post.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+            st.plotly_chart(cat_post, use_container_width=True, config=plotly_config)
+
+    st.markdown("**Top categories Pre vs Post COVID (Top 6)**")
     if cat_compare is None:
         st.info("No data for category comparison.")
     else:
+        cat_compare.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
         st.plotly_chart(cat_compare, use_container_width=True, config=plotly_config)
-    
-    # d) Top events pre vs post
-    st.markdown("**d) Tickets by Event — Pre vs Post COVID (Top events in both periods)**")
+
+    # --- 5) Top Events: Pre vs Post COVID ---
+    st.subheader("5) Top Events: Pre vs Post COVID")
+    st.caption("Shared events present in both periods, showing tickets pre vs post COVID.")
     ev_compare = fig_top_events_pre_post(df, k=12)
     if ev_compare is None:
         st.info("No events found in both periods.")
     else:
+        ev_compare.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
         st.plotly_chart(ev_compare, use_container_width=True, config=plotly_config)
 
 
