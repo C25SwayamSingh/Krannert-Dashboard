@@ -87,6 +87,15 @@ def inject_styles() -> None:
             font-size: 12px;
             color: #6b625a;
         }
+        /* KPI help icon (fallback tooltip) */
+        .kpi-help {
+            cursor: help;
+            font-size: 0.9rem;
+            display: inline-block;
+            padding-left: 6px;
+            line-height: 1;
+            opacity: 0.85;
+        }
         /* Buttons */
         .primary-btn button, .primary-btn>button {
             background: #2F2A24 !important;
@@ -140,6 +149,20 @@ def inject_styles() -> None:
         </style>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def label_with_help(text: str, help_text: str) -> None:
+    """Render a label with a small ℹ️ help tooltip (inline HTML for alignment)."""
+    # Using HTML/CSS tooltip to ensure the icon stays tight to the text
+    st.markdown(
+        f"""
+        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+            <strong style="margin-right: 4px;">{text}</strong>
+            <span class="kpi-help" title="{help_text}">ℹ️</span>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
 
@@ -342,33 +365,117 @@ def render_kpis(kpis: dict) -> None:
     if kpis["delta_30d"] is not None:
         delta_display = _format_percent(kpis["delta_30d"] * 100)
 
-    col1.metric("Tickets last 30 days", _format_int(kpis["tickets_30d"]), delta=delta_display)
-    col2.metric("Avg price last 30 days", _format_currency(kpis["avg_price_30d"]))
-    col3.metric("Open events next 30 days", _format_int(kpis["open_events"]))
-    col4.metric("% events behind pace (≤120d)", _format_percent(kpis["behind_pct"]), kpis["behind_detail"])
+    with col1:
+        label_with_help(
+            "Tickets last 30 days",
+            "Tickets sold in the last 30 days. Delta vs the prior 30 days.",
+        )
+        st.metric(label="", value=_format_int(kpis["tickets_30d"]), delta=delta_display)
+
+    with col2:
+        label_with_help(
+            "Avg price last 30 days",
+            "Average realized price per ticket over the last 30 days.",
+        )
+        st.metric(label="", value=_format_currency(kpis["avg_price_30d"]))
+
+    with col3:
+        label_with_help(
+            "Open events next 30 days",
+            "Distinct events scheduled in the next 30 days that are still on sale.",
+        )
+        st.metric(label="", value=_format_int(kpis["open_events"]))
+
+    with col4:
+        label_with_help(
+            "% events behind pace (≤120d)",
+            "Share of upcoming events (≤120 days out) selling slower than their historical median at the same days-out. These are the top marketing/price-review priorities.",
+        )
+        st.metric(
+            label="",
+            value=_format_percent(kpis["behind_pct"]),
+            delta=kpis["behind_detail"],
+            delta_color="inverse",
+        )
 
 
 # ---------------------------------------------------------------------------
 # Watchlist table (using new pacing module)
 # ---------------------------------------------------------------------------
+def render_watchlist_summary(watchlist_df: pd.DataFrame, upcoming_window_days: int = 120) -> None:
+    if watchlist_df is None or watchlist_df.empty:
+        st.caption(f"Showing **0** upcoming events (≤{upcoming_window_days}d) that match your filters.")
+        return
+
+    # Normalize the status labels robustly
+    status_col = None
+    for c in ["status", "Status", "STATUS"]:
+        if c in watchlist_df.columns:
+            status_col = c
+            break
+
+    if status_col is None:
+        # No status column; just show the total
+        st.caption(f"Showing **{len(watchlist_df)}** upcoming events (≤{upcoming_window_days}d) that match your filters.")
+        return
+
+    s = (watchlist_df[status_col]
+         .astype(str).str.strip().str.lower()
+         .map({"behind": "Behind", "on pace": "On pace", "ahead": "Ahead"}))
+
+    counts = s.value_counts().reindex(["Behind", "On pace", "Ahead"], fill_value=0)
+    n_total = int(counts.sum())
+    n_behind = int(counts["Behind"])
+    n_on     = int(counts["On pace"])
+    n_ahead  = int(counts["Ahead"])
+
+    # Lightweight CSS for compact color pills (keeps current theme)
+    # Using .pill-status to avoid conflict with global .pill
+    st.markdown("""
+        <style>
+          .pill-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            margin-left: 6px;
+          }
+          .pill-red { background: #ffe8e6; color: #b42318; }
+          .pill-amber { background: #fff3cd; color: #7a5b00; }
+          .pill-green { background: #eaf7ec; color: #1a7f37; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(
+        (f"**Showing {n_total} upcoming events (≤{upcoming_window_days}d) that match your filters —** "
+         f"<span class='pill-status pill-red'>{n_behind} behind</span> "
+         f"<span class='pill-status pill-amber'>{n_on} on pace</span> "
+         f"<span class='pill-status pill-green'>{n_ahead} ahead</span>."
+        ),
+        unsafe_allow_html=True
+    )
+
+
 def render_watchlist(watch_table: pd.DataFrame, fallback_tiers: set, filters_summary: str) -> None:
     """Render the event pacing watchlist with Plotly table for visibility."""
     with st.expander("What do these columns mean?"):
-        st.markdown(
-            """
-<ul class="help-list">
-  <li><b>Days-out</b>: Days until the event (e.g., 45 = event is 45 days away).</li>
-  <li><b>Sold so far (%)</b>: 100 × Tickets so far ÷ Typical final total. Typical final total = median final tickets for similar past events in the cohort (the denominator).</li>
-  <li><b>Typical at this day (%)</b>: Median sell-through for similar past events at the same days-out.</li>
-  <li><b>Gap vs typical (pp)</b>: Sold so far (%) − Typical at this day (%) in percentage points. Negative = behind; positive = ahead.</li>
-  <li><b>Tickets so far</b>: Raw ticket count sold to date.</li>
-  <li><b>Status</b>: Ahead / On pace / Behind (On-pace band = −5 to +5 pp).</li>
-  <li><b>Cohort</b>: Comparison group used (event type; event type + weekday/+venue; or global when history is thin).</li>
-</ul>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown("""
+- **Days-out**: Days until the event (e.g., 45 = event is 45 days away).
+- **Sold so far (%)**: 100 × tickets sold so far ÷ typical final audience size.
+- **Typical at this day (%)**: Median sell-through for similar past events at the same days-out.
+- **Gap vs typical (pp)**: *Sold so far – Typical at this day* (percentage points). Negative = behind; positive = ahead.
+- **Status**: Ahead / On pace / Behind (on-pace band = −5 to +5 pp).
+- **Tickets so far**: Raw ticket count sold to date for the event.
+- **Cohort**: Comparison group used (e.g., event type; event type + weekday/+venue; or global when history is thin).
+        """)
     
+    # Render concise summary
+    try:
+        window_days = pacing.D_MAX
+    except AttributeError:
+        window_days = 120
+    render_watchlist_summary(watch_table, upcoming_window_days=window_days)
+
     st.caption(filters_summary)
 
     if watch_table.empty:
