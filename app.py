@@ -153,13 +153,64 @@ def inject_styles() -> None:
 
 
 def label_with_help(text: str, help_text: str) -> None:
-    """Render a label with a small ℹ️ help tooltip (inline HTML for alignment)."""
-    # Using HTML/CSS tooltip to ensure the icon stays tight to the text
+    """Render a label with a small info icon and instant CSS tooltip."""
+    # Escape quotes in help text for HTML attribute
+    safe_help = help_text.replace('"', '&quot;').replace("'", "&#39;")
     st.markdown(
         f"""
+        <style>
+            .kpi-tooltip-wrap {{
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+            }}
+            .kpi-tooltip-icon {{
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: #e0dcd6;
+                color: #5b524a;
+                font-size: 11px;
+                font-weight: 600;
+                font-style: italic;
+                font-family: Georgia, serif;
+            }}
+            .kpi-tooltip-icon:hover + .kpi-tooltip-text,
+            .kpi-tooltip-text:hover {{
+                visibility: visible;
+                opacity: 1;
+            }}
+            .kpi-tooltip-text {{
+                visibility: hidden;
+                opacity: 0;
+                position: absolute;
+                left: 0;
+                bottom: 100%;
+                margin-bottom: 6px;
+                background: #2F2A24;
+                color: #fff;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 400;
+                font-style: normal;
+                width: 260px;
+                z-index: 1000;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                transition: opacity 0.1s ease-in-out;
+                line-height: 1.4;
+            }}
+        </style>
         <div style="display: flex; align-items: center; margin-bottom: 4px;">
-            <strong style="margin-right: 4px;">{text}</strong>
-            <span class="kpi-help" title="{help_text}">ℹ️</span>
+            <strong style="margin-right: 6px;">{text}</strong>
+            <span class="kpi-tooltip-wrap">
+                <span class="kpi-tooltip-icon">i</span>
+                <span class="kpi-tooltip-text">{safe_help}</span>
+            </span>
         </div>
         """,
         unsafe_allow_html=True
