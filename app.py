@@ -421,21 +421,34 @@ def render_kpis(kpis: dict) -> None:
             "Tickets last 30 days",
             "Tickets sold in the last 30 days. Delta vs the prior 30 days.",
         )
-        st.metric(label="", value=_format_int(kpis["tickets_30d"]), delta=delta_display)
+        st.metric(
+            label="Tickets last 30 days",
+            value=_format_int(kpis["tickets_30d"]),
+            delta=delta_display,
+            label_visibility="collapsed",
+        )
 
     with col2:
         label_with_help(
             "Avg price last 30 days",
             "Average realized price per ticket over the last 30 days.",
         )
-        st.metric(label="", value=_format_currency(kpis["avg_price_30d"]))
+        st.metric(
+            label="Avg price last 30 days",
+            value=_format_currency(kpis["avg_price_30d"]),
+            label_visibility="collapsed",
+        )
 
     with col3:
         label_with_help(
             "Open events next 30 days",
             "Distinct events scheduled in the next 30 days that are still on sale.",
         )
-        st.metric(label="", value=_format_int(kpis["open_events"]))
+        st.metric(
+            label="Open events next 30 days",
+            value=_format_int(kpis["open_events"]),
+            label_visibility="collapsed",
+        )
 
     with col4:
         label_with_help(
@@ -443,10 +456,11 @@ def render_kpis(kpis: dict) -> None:
             "Share of upcoming events (≤120 days out) selling slower than their historical median at the same days-out. These are the top marketing/price-review priorities.",
         )
         st.metric(
-            label="",
+            label="% events behind pace",
             value=_format_percent(kpis["behind_pct"]),
             delta=kpis["behind_detail"],
             delta_color="inverse",
+            label_visibility="collapsed",
         )
 
 
@@ -941,7 +955,7 @@ def sales_heatmap_fig_new(df: pd.DataFrame) -> go.Figure | None:
     if total <= 0 or len(z["event_name"].unique()) < 20 or len(z) < 500:
         return None
     p = (
-        z.groupby(["weekday", "lead_bucket"])["qty_sold"]
+        z.groupby(["weekday", "lead_bucket"], observed=False)["qty_sold"]
         .sum()
         .reset_index()
     )

@@ -510,12 +510,15 @@ def derive_core(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     avg_pre = average_tickets_per_event(pre_df, "Pre (sale < Mar 1 2020)")
     avg_post = average_tickets_per_event(post_df, "Post (sale ≥ Jul 1 2021)")
     
+    avg_tickets_parts = [part for part in (avg_pre, avg_post) if not part.empty]
+    avg_tickets = pd.concat(avg_tickets_parts, ignore_index=True) if avg_tickets_parts else avg_pre
+
     outputs = {
         "base": base,
         "event_pacing": pacing,
         "cohort_library": cohort_library,
         "global_pacing_curve": global_curve,
-        "avg_tickets": pd.concat([avg_pre, avg_post], ignore_index=True),
+        "avg_tickets": avg_tickets,
         "category_share_pre": category_share(pre_df, group_col="event_type", label="event_type"),
         "category_share_post": category_share(post_df, group_col="event_type", label="event_type"),
         "events_pre_post": events_common(pre_df, post_df),
