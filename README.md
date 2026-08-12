@@ -1,5 +1,7 @@
 # krannert-dash
 
+**🔗 Live app:** [krannert-dashboard-datastorytelling.streamlit.app](https://krannert-dashboard-datastorytelling.streamlit.app/)
+
 Streamlit dashboard for analyzing Krannert event sales with a lightweight data prep layer and Plotly visualizations.
 
 ## Project structure
