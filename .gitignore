@@ -7,8 +7,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 
-# Streamlit cache
-.streamlit/
+# Streamlit local secrets (never commit credentials)
+.streamlit/secrets.toml
 
 # OS/IDE noise
 .DS_Store
