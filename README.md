@@ -38,24 +38,76 @@ pip install -r requirements.txt
 
 ## Updating with new season data
 
-Use `data/template_sales_import.csv` as the spreadsheet template — one row per sale
-transaction, same columns as the combined file:
+The dashboard reads one combined file, `data/sales_2016_2026_combined.csv`.
+`scripts/ingest.py` builds that file from Krannert's raw per-season exports, so
+nobody has to hand-clean or hand-merge anything.
 
-`sale_date, qty_sold, amount, event_part, event_name, event_date, season, source_file`
+### What Krannert sends
 
-- `event_part` is the price-category code (SA, SC, UI, YT, C, FA, SU, ...).
-- Dates should be `YYYY-MM-DD`.
-- `season` is the label like `2026-2027`; `source_file` is just a note about where the rows came from.
+One CSV per season, exported the same way as the existing
+`Daily Sales 24-25 Season.csv` files — **no cleaning needed**, one row per sale
+transaction. Name the file with the season in it (`Daily Sales 26-27 Season.csv`)
+and the script derives the season label automatically.
 
-Two ways to load it:
+Required columns (header matching is case- and spacing-insensitive, so
+`Sale Date`, `sale_date`, and `SALE DATE` all work; extra columns are ignored):
 
-1. **Quick look (temporary):** export the new season's sales into the template columns,
-   append them to a copy of the combined CSV, and upload it via the sidebar's
-   "Upload updated data". This affects only your browser session.
-2. **Permanent update (live site):** append the new rows to
-   `data/sales_2016_2026_combined.csv` in this repo and push to `main` — Streamlit
-   Cloud redeploys automatically. The dashboard's "as-of" date defaults to the newest
-   `sale_date` in the file, so pacing updates on its own.
+| Column | Also accepted as | Notes |
+|---|---|---|
+| `sale_date` | Sale Date, Date, Transaction Date | `YYYY-MM-DD` preferred |
+| `qty_sold` | Quantity, Qty, Tickets, Seats | negatives = refunds, kept |
+| `event_name` | Performance, Event, Production | e.g. `Fr/The Nutcracker` |
+| `event_date` | Performance Date, Show Date, Perf Date | the performance date |
+| `amount` | Total, Revenue, Sales, Price | optional; defaults to 0 |
+| `event_part` | Price Type, Ticket Type, Price Category | optional; the SA/UI/SC/YT price code |
+
+`data/template_sales_import.csv` is a filled-in example of this layout.
+
+### Running the pipeline
+
+```bash
+python scripts/ingest.py "data/raw/Daily Sales 26-27 Season.csv"
+```
+
+This validates the file, appends it to the combined CSV, and reports any data
+quality issues. Useful flags:
+
+- `--dry-run` — validate and report without writing (always worth doing first)
+- `--rebuild` — rebuild the combined file from scratch: `python scripts/ingest.py data/raw/*.csv --rebuild`
+
+Re-running with a season that is already present **replaces** those rows rather
+than duplicating them, so it is safe to re-ingest a corrected export.
+
+Then commit and push; Streamlit Cloud redeploys automatically and the "as-of"
+date follows the newest `sale_date` in the file, so pacing updates by itself.
+
+For a one-off look without touching the repo, the sidebar's
+"Upload updated data" accepts an already-combined CSV for that browser session only.
+
+### What the script checks
+
+Structural problems (missing columns, an unreadable file, zero usable rows) stop
+the run with an explicit message. Data-quality problems are reported but do not
+block, because the dashboard already skips unusable rows:
+
+- unreadable or blank dates and event names
+- implausible `event_date` values — typos like a 1930 or 2007 performance date
+- sales dated after the performance (normal for subscriptions, otherwise a bad `event_date`)
+- `qty_sold <= 0` refund/exchange rows (kept — they net out correctly)
+- exact duplicate rows (removed)
+
+### Known issues in the current dataset
+
+Found by running these checks over the existing combined file — worth correcting
+at the source when Krannert next exports:
+
+- `Sa/Cabaret` has `event_date` **1930-03-07** (181 rows) and
+  `Tu/Russian National Ballet Theatre: Carmen/Romeo and Juliet` has **2007-01-17**
+  (236 rows). Both are clearly year typos, and both fall outside the dashboard's
+  date range, so those rows are currently invisible in every chart.
+- `Sa/Oklahoma!` is dated 2024-06-16 but sold Aug–Nov 2024 — likely 2025-06-16.
+- 7 rows have no `event_name`/`event_date` and are skipped on load.
+- 106 rows have `qty_sold <= 0` (refunds); these are intentional and net out.
 
 ## Data expectations
 

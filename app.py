@@ -393,7 +393,12 @@ def summarize_filters(filters: dict) -> str:
             snippet += f" +{remainder} more"
         return f"{label}: {snippet}"
 
-    seasons_text = summarize(filters.get("seasons") or [], "Season")
+    all_seasons = filters.get("seasons") or []
+    seasons_text = (
+        f"Seasons: all {len(all_seasons)} ({all_seasons[0]}–{all_seasons[-1]})"
+        if all_seasons
+        else "Seasons: All"
+    )
     channels_text = summarize(filters.get("channels") or [], "Channel")
 
     start, end = filters.get("date_range", (None, None))
@@ -434,10 +439,18 @@ def sidebar_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, str]:
     defaults = default_filter_bounds(df)
     st.sidebar.subheader("Filters")
 
+    # Seasons are shown, not filtered. Every season in the file is always
+    # included: the historical seasons are what the pacing benchmarks are
+    # built from, so letting users drop them silently weakened the baseline
+    # while the headline metrics appeared unchanged.
     seasons = defaults["all_seasons"]
-    selected_seasons = st.sidebar.multiselect(
-        "Season", seasons, default=defaults["selected_seasons"], placeholder="All seasons"
-    )
+    selected_seasons = seasons
+    if seasons:
+        st.sidebar.markdown("**Seasons included**")
+        st.sidebar.caption(
+            f"All {len(seasons)} in the data — {seasons[0]} through {seasons[-1]}. "
+            "Use the event date range below to narrow the view."
+        )
 
     channels = sorted(df["channel"].dropna().unique()) if "channel" in df.columns else []
     selected_channels = st.sidebar.multiselect(
@@ -460,8 +473,6 @@ def sidebar_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, str]:
     end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 
     mask = pd.Series(True, index=df.index)
-    if selected_seasons:
-        mask &= df["season"].isin(selected_seasons)
     if selected_channels and "channel" in df.columns:
         mask &= df["channel"].isin(selected_channels)
     mask &= df["event_date"].between(start_ts, end_ts)

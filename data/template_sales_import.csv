@@ -1,3 +1,4 @@
-sale_date,qty_sold,amount,event_part,event_name,event_date,season,source_file
-2026-06-03,2.0,48.0,SA,Fr/Example Show Title,2026-09-18,2026-2027,Daily Sales 26-27 Season.csv
-2026-06-04,1.0,12.0,UI,Fr/Example Show Title,2026-09-18,2026-2027,Daily Sales 26-27 Season.csv
+sale_date,qty_sold,amount,event_part,event_name,event_date
+2026-06-03,2,48.00,SA,Fr/Example Show Title,2026-09-18
+2026-06-04,1,12.00,UI,Fr/Example Show Title,2026-09-18
+2026-06-05,4,96.00,SC,Sa/Another Example Show,2026-10-10
