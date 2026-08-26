@@ -13,6 +13,10 @@ PRE_END = pd.Timestamp("2020-03-01")
 POST_START = pd.Timestamp("2021-07-01")
 DROP_OTHER = True
 
+# Monochrome series colors (match app.py tokens): Post = ink (emphasis), Pre = gray
+INK = "#171717"
+GRAY_SERIES = "#8C8C8C"
+
 
 def _ensure(df: pd.DataFrame) -> pd.DataFrame:
     z = df.copy()
@@ -71,6 +75,7 @@ def _bar(series: pd.Series) -> go.Figure:
             y=series.values,
             text=series.values,
             textposition="outside",
+            marker_color=INK,
         )
     )
     fig.update_layout(
@@ -104,8 +109,8 @@ def fig_top_categories_pre_post(df: pd.DataFrame, top_n: int = 6) -> go.Figure:
     post_y = post.reindex(cats).fillna(0)
 
     fig = go.Figure()
-    fig.add_bar(name="Pre-2020", x=cats, y=pre_y.values)
-    fig.add_bar(name="Post-2021", x=cats, y=post_y.values)
+    fig.add_bar(name="Pre-2020", x=cats, y=pre_y.values, marker_color=GRAY_SERIES)
+    fig.add_bar(name="Post-2021", x=cats, y=post_y.values, marker_color=INK)
     fig.update_layout(
         barmode="group",
         yaxis_title="Tickets sold",
@@ -127,8 +132,8 @@ def fig_top_events_pre_post(df: pd.DataFrame, k: int = 12) -> go.Figure:
     top = (pre + post).sort_values(ascending=False).head(k).index
 
     fig = go.Figure()
-    fig.add_bar(name="Pre-2020", x=top, y=pre.reindex(top).fillna(0).values)
-    fig.add_bar(name="Post-2021", x=top, y=post.reindex(top).fillna(0).values)
+    fig.add_bar(name="Pre-2020", x=top, y=pre.reindex(top).fillna(0).values, marker_color=GRAY_SERIES)
+    fig.add_bar(name="Post-2021", x=top, y=post.reindex(top).fillna(0).values, marker_color=INK)
     fig.update_layout(
         barmode="group",
         yaxis_title="Tickets sold",

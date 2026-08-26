@@ -36,58 +36,120 @@ WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
+# Monochrome design tokens (Figma-style: white surface, hairline borders, near-black ink)
+INK = "#171717"        # primary ink & primary data series
+INK_SOFT = "#525252"   # secondary text
+INK_MUTED = "#8A8A8A"  # captions, hints
+GRAY_SERIES = "#8C8C8C"  # secondary data series (validated ≥3:1 on white)
+BORDER = "#E6E6E6"     # hairline borders
+BORDER_STRONG = "#D9D9D9"
+SURFACE = "#FFFFFF"
+SURFACE_ALT = "#FAFAFA"
+GRID = "#EFEFEF"       # chart gridlines
+BAND = "rgba(23,23,23,0.06)"  # IQR band fill
+FONT_STACK = "'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+
+
 def inject_styles() -> None:
-    """Inject global CSS for the warm, minimal theme."""
+    """Inject global CSS for the monochrome, Figma-like theme."""
     st.markdown(
         """
         <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        html, body, .stApp, [class*="css"] {
+            font-family: 'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
         /* Global layout */
         .block-container {
-            max-width: 1300px;
-            padding-top: 1.5rem;
-            padding-bottom: 3rem;
+            max-width: 1200px;
+            padding-top: 1.25rem;
+            padding-bottom: 4rem;
         }
-        body {
-            background: #F4EEE6;
-            color: #1F1A17;
+        body { background: #FFFFFF; color: #171717; }
+        .stApp { background: #FFFFFF; }
+
+        /* Typography: tight, quiet, Figma-like */
+        h1, h2, h3 { letter-spacing: -0.02em; font-weight: 600; color: #171717; }
+        h3 { font-size: 1.15rem; margin-bottom: 0.25rem; }
+        [data-testid="stCaptionContainer"], .stCaption { color: #8A8A8A; }
+        p, li { color: #303030; }
+
+        /* Sidebar: light gray panel with a hairline divider */
+        [data-testid="stSidebar"] {
+            background: #FAFAFA;
+            border-right: 1px solid #E6E6E6;
         }
-        .stApp {
-            background: #F4EEE6;
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #525252;
+            font-weight: 600;
         }
+        [data-testid="stSidebar"] hr { border-color: #E6E6E6; }
+
         /* Cards */
         .card {
             background: #FFFFFF;
-            border-radius: 14px;
-            padding: 14px 18px 12px;
-            box-shadow: 0 2px 6px rgba(47,42,36,0.06);
-            border: 1px solid rgba(47,42,36,0.08);
-            margin-bottom: 12px;
+            border-radius: 8px;
+            padding: 16px 20px 14px;
+            border: 1px solid #E6E6E6;
+            margin-bottom: 14px;
         }
-        .card h3, .card h4, .card h5 {
-            margin-top: 0.1rem;
+        .card h3, .card h4, .card h5 { margin-top: 0.1rem; }
+
+        /* Metric tiles: bordered white cards, hairline, no shadow */
+        [data-testid="stMetric"] {
+            background: #FFFFFF;
+            border: 1px solid #E6E6E6;
+            border-radius: 8px;
+            padding: 12px 16px;
         }
-        /* KPI tiles */
-        .kpi-card {
-            padding: 14px 16px 12px;
-        }
-        .kpi-label {
+        [data-testid="stMetricLabel"] {
+            color: #8A8A8A;
             font-size: 12px;
-            letter-spacing: 0.6px;
+        }
+        [data-testid="stMetricValue"] {
+            color: #171717;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        [data-testid="stMetricDelta"] {
+            font-size: 12px;
+            color: #525252 !important;
+            background: #F5F5F5 !important;
+        }
+        [data-testid="stMetricDelta"] svg { fill: #525252 !important; color: #525252 !important; }
+
+        /* Alerts (info/success/warning): quiet monochrome panels */
+        [data-testid="stAlertContainer"] {
+            background: #FAFAFA !important;
+            border: 1px solid #E6E6E6 !important;
+            border-radius: 8px !important;
+            color: #303030 !important;
+        }
+        [data-testid="stAlertContainer"] p { color: #303030 !important; }
+        [data-testid="stAlertContainer"] svg { fill: #525252 !important; }
+
+        /* KPI tiles (custom) */
+        .kpi-card { padding: 14px 16px 12px; }
+        .kpi-label {
+            font-size: 11px;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
-            color: #5b524a;
+            color: #8A8A8A;
             margin-bottom: 2px;
         }
         .kpi-value {
             font-size: 26px;
-            font-weight: 700;
+            font-weight: 600;
+            letter-spacing: -0.02em;
             margin-bottom: 2px;
-            color: #1F1A17;
+            color: #171717;
         }
-        .kpi-delta {
-            font-size: 12px;
-            color: #6b625a;
-        }
-        /* KPI help icon (fallback tooltip) */
+        .kpi-delta { font-size: 12px; color: #525252; }
         .kpi-help {
             cursor: help;
             font-size: 0.9rem;
@@ -96,60 +158,108 @@ def inject_styles() -> None:
             line-height: 1;
             opacity: 0.85;
         }
-        /* Buttons */
-        .primary-btn button, .primary-btn>button {
-            background: #2F2A24 !important;
-            color: #FFFFFF !important;
-            border-radius: 999px !important;
-            border: 1px solid #2F2A24 !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+        /* Buttons: solid black primary, quiet gray ghost, small radius */
+        .stButton>button, .stDownloadButton>button {
+            border-radius: 6px !important;
+            border: 1px solid #D9D9D9 !important;
+            background: #FFFFFF !important;
+            color: #171717 !important;
+            font-weight: 500 !important;
+            box-shadow: none !important;
+            transition: border-color 0.1s ease, background 0.1s ease;
         }
-        .primary-btn button:hover { transform: translateY(-1px); }
+        .stButton>button:hover, .stDownloadButton>button:hover {
+            border-color: #171717 !important;
+            background: #FAFAFA !important;
+        }
+        .primary-btn button, .primary-btn>button {
+            background: #171717 !important;
+            color: #FFFFFF !important;
+            border: 1px solid #171717 !important;
+        }
         .ghost-btn button, .ghost-btn>button {
             background: transparent !important;
-            color: #2F2A24 !important;
-            border-radius: 999px !important;
-            border: 1px solid rgba(47,42,36,0.3) !important;
+            color: #171717 !important;
+            border: 1px solid #D9D9D9 !important;
         }
+
         /* Badges & helper text */
         .pill {
             display: inline-block;
             padding: 2px 8px;
-            border-radius: 10px;
-            background: #F4EEE6;
-            border: 1px solid rgba(47,42,36,0.12);
-            color: #2F2A24;
+            border-radius: 4px;
+            background: #FAFAFA;
+            border: 1px solid #E6E6E6;
+            color: #525252;
             font-size: 11px;
         }
-        .muted {
-            color: #6b625a;
-            font-size: 13px;
+        .muted { color: #8A8A8A; font-size: 13px; }
+
+        /* Inputs: hairline borders */
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] input {
+            border-color: #E6E6E6 !important;
+            background: #FFFFFF;
         }
+
         /* Hide Streamlit settings (theme chooser) to keep a single enforced theme */
-        div[data-testid="stToolbar"] button[title="Settings"] {
-            display: none !important;
-        }
+        div[data-testid="stToolbar"] button[title="Settings"] { display: none !important; }
+
         /* Compact, readable help list */
         .help-list {
             margin: 0.25rem 0 0.5rem 0;
             padding-left: 1.0rem;
             line-height: 1.6;
-            color: var(--text-color, #1F1A17);
+            color: #303030;
             font-size: 14px;
         }
-        .help-list li {
-            margin: 0.2rem 0;
+        .help-list li { margin: 0.2rem 0; }
+
+        /* Expanders: bordered, flat */
+        [data-testid="stExpander"] {
+            border: 1px solid #E6E6E6 !important;
+            border-radius: 8px !important;
+            background: #FFFFFF;
         }
-        /* Keep expander body aligned with card style */
+        [data-testid="stExpander"] summary { color: #525252; }
         [data-testid="stExpander"] .streamlit-expanderContent {
-            background: rgba(255,255,255,0.6);
-            border-radius: 10px;
+            background: #FFFFFF;
+            border-radius: 8px;
             padding: 0.5rem 0.75rem;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+def style_mono(fig: go.Figure) -> go.Figure:
+    """Apply the monochrome chart style: Inter, white surface, recessive grid/axes."""
+    fig.update_layout(
+        template="plotly_white",
+        font=dict(family=FONT_STACK, color=INK, size=12),
+        paper_bgcolor=SURFACE,
+        plot_bgcolor=SURFACE,
+        colorway=[INK, GRAY_SERIES, "#BFBFBF", "#5E5E5E"],
+        legend=dict(font=dict(color=INK_SOFT, size=11)),
+        hoverlabel=dict(
+            bgcolor=INK,
+            font=dict(family=FONT_STACK, color="#FFFFFF", size=12),
+            bordercolor=INK,
+        ),
+    )
+    fig.update_xaxes(
+        gridcolor=GRID, linecolor=BORDER_STRONG, tickcolor=BORDER_STRONG,
+        title_font=dict(color=INK_MUTED, size=11), tickfont=dict(color=INK_SOFT, size=11),
+        zerolinecolor=GRID,
+    )
+    fig.update_yaxes(
+        gridcolor=GRID, linecolor=BORDER_STRONG, tickcolor=BORDER_STRONG,
+        title_font=dict(color=INK_MUTED, size=11), tickfont=dict(color=INK_SOFT, size=11),
+        zerolinecolor=GRID,
+    )
+    return fig
 
 
 def label_with_help(text: str, help_text: str) -> None:
@@ -172,12 +282,10 @@ def label_with_help(text: str, help_text: str) -> None:
                 width: 16px;
                 height: 16px;
                 border-radius: 50%;
-                background: #e0dcd6;
-                color: #5b524a;
-                font-size: 11px;
+                background: #EDEDED;
+                color: #525252;
+                font-size: 10px;
                 font-weight: 600;
-                font-style: italic;
-                font-family: Georgia, serif;
             }}
             .kpi-tooltip-icon:hover + .kpi-tooltip-text,
             .kpi-tooltip-text:hover {{
@@ -191,7 +299,7 @@ def label_with_help(text: str, help_text: str) -> None:
                 left: 0;
                 bottom: 100%;
                 margin-bottom: 6px;
-                background: #2F2A24;
+                background: #171717;
                 color: #fff;
                 padding: 8px 12px;
                 border-radius: 6px;
@@ -518,17 +626,17 @@ def render_watchlist_summary(
             font-size: 0.85rem;
             margin-left: 6px;
           }
-          .pill-red { background: #ffe8e6; color: #b42318; }
-          .pill-amber { background: #fff3cd; color: #7a5b00; }
-          .pill-green { background: #eaf7ec; color: #1a7f37; }
+          .pill-behind { background: #171717; color: #FFFFFF; }
+          .pill-on { background: #E8E8E8; color: #171717; }
+          .pill-ahead { background: #FFFFFF; color: #525252; border: 1px solid #D9D9D9; }
         </style>
     """, unsafe_allow_html=True)
 
     st.markdown(
         (f"**Showing {n_total} upcoming events (≤{upcoming_window_days}d) that match your filters —** "
-         f"<span class='pill-status pill-red'>{n_behind} behind</span> "
-         f"<span class='pill-status pill-amber'>{n_on} on pace</span> "
-         f"<span class='pill-status pill-green'>{n_ahead} ahead</span>."
+         f"<span class='pill-status pill-behind'>● {n_behind} behind</span> "
+         f"<span class='pill-status pill-on'>◐ {n_on} on pace</span> "
+         f"<span class='pill-status pill-ahead'>○ {n_ahead} ahead</span>."
         ),
         unsafe_allow_html=True
     )
@@ -588,13 +696,13 @@ def render_watchlist(
     ]
     display = watch_table[[c for c in display_cols if c in watch_table.columns]].copy()
 
-    # Color palette for status
+    # Monochrome rows: Behind rows get a soft gray wash; status is also glyph-coded
     def status_color(status: str) -> str:
         if status == "Behind":
-            return "#ffd6de"  # brighter pink
-        if status == "Ahead":
-            return "#e3f7e3"  # soft green
-        return "#fff7da"      # soft yellow
+            return "#F5F5F5"
+        return "#FFFFFF"
+
+    STATUS_GLYPHS = {"Behind": "● Behind", "On pace": "◐ On pace", "Ahead": "○ Ahead"}
 
     # Format values for display
     fmt = {
@@ -603,6 +711,7 @@ def render_watchlist(
         "typical_at_day_pct": lambda v: f"{v:.1f}%",
         "gap_pp": lambda v: f"{v:.1f}",
         "tickets_so_far": lambda v: f"{int(v):,}",
+        "status": lambda v: STATUS_GLYPHS.get(v, v),
     }
     formatted_cols = []
     for col in display_cols:
@@ -628,22 +737,29 @@ def render_watchlist(
                         "<b>Status</b>",
                         "<b>Cohort</b>",
                     ],
-                    fill_color="#2c3e50",
-                    font=dict(color="white", size=13),
+                    fill_color=SURFACE_ALT,
+                    line_color=BORDER,
+                    font=dict(family=FONT_STACK, color=INK_SOFT, size=12),
                     align="left",
                     height=32,
                 ),
                 cells=dict(
                     values=formatted_cols,
                     fill_color=row_colors,
+                    line_color="#F0F0F0",
                     align="left",
-                    font=dict(color="#1a1a1a", size=12),
+                    font=dict(family=FONT_STACK, color=INK, size=12),
                     height=30,
                 ),
             )
         ]
     )
-    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=min(600, 35 + 30 * len(display) + 60))
+    fig.update_layout(
+        font=dict(family=FONT_STACK),
+        paper_bgcolor=SURFACE,
+        margin=dict(l=0, r=0, t=10, b=0),
+        height=min(600, 35 + 30 * len(display) + 60),
+    )
     st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
 
     # Summary stats with emojis — use full evaluated counts, not the truncated
@@ -657,9 +773,9 @@ def render_watchlist(
         ahead_count = int((watch_table["status"] == "Ahead").sum())
         on_pace_count = int((watch_table["status"] == "On pace").sum())
     c1, c2, c3 = st.columns(3)
-    c1.metric("🔴 Behind pace", behind_count)
-    c2.metric("🟨 On pace", on_pace_count)
-    c3.metric("🟢 Ahead of pace", ahead_count)
+    c1.metric("● Behind pace", behind_count)
+    c2.metric("◐ On pace", on_pace_count)
+    c3.metric("○ Ahead of pace", ahead_count)
 
 
 # ---------------------------------------------------------------------------
@@ -820,7 +936,7 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
             fill="toself",
             mode="lines",
             line=dict(width=0),
-            fillcolor="rgba(31,119,180,0.15)",
+            fillcolor=BAND,
             name="Historic IQR (p25–p75)",
             hoverinfo="skip",
         )
@@ -832,7 +948,7 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
             x=global_curve["d_bin"],
             y=global_curve["median_pct"],
             mode="lines",
-            line=dict(color="#1f77b4", width=3),
+            line=dict(color=INK, width=2),
             name="Historic median",
             hovertemplate="Day %{x}: %{y:.1f}%<extra></extra>",
         )
@@ -845,7 +961,7 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
                 x=current_curve["d_bin"],
                 y=current_curve["cum_pct"],
                 mode="lines",
-                line=dict(color="#ff7f0e", width=3, dash="dash"),
+                line=dict(color=GRAY_SERIES, width=2, dash="dash"),
                 name="Current selection",
                 hovertemplate="Day %{x}: %{y:.1f}%<extra></extra>",
             )
@@ -856,10 +972,10 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
         fig.add_vline(
             x=d,
             line_dash="dot",
-            line_color="gray",
-            opacity=0.5,
+            line_color=BORDER_STRONG,
             annotation_text=label,
             annotation_position="top",
+            annotation_font=dict(color=INK_MUTED, size=11),
         )
 
     fig.update_layout(
@@ -996,7 +1112,7 @@ def sales_heatmap_fig_new(df: pd.DataFrame) -> go.Figure | None:
     fig = px.imshow(
         matrix,
         aspect="auto",
-        color_continuous_scale="Blues",
+        color_continuous_scale="Greys",
         title=None,
     )
     fig.update_layout(
@@ -1125,7 +1241,7 @@ def avg_tickets_fig(df: pd.DataFrame) -> tuple[go.Figure | None, bool]:
         text="bar_label",
         labels={"_etype_label": "Event type", "avg_tickets_per_event": "Avg tickets per event"},
         category_orders={"period": ["Pre-COVID", "Post-COVID"]},
-        color_discrete_map={"Pre-COVID": "#636EFA", "Post-COVID": "#EF553B"},
+        color_discrete_map={"Pre-COVID": GRAY_SERIES, "Post-COVID": INK},
     )
     fig.update_traces(textposition="outside", cliponaxis=False)
     fig.update_layout(
@@ -1231,7 +1347,7 @@ def sales_heatmap_fig(heat_df: pd.DataFrame) -> go.Figure | None:
     fig = px.imshow(
         matrix,
         aspect="auto",
-        color_continuous_scale="Blues",
+        color_continuous_scale="Greys",
         title=None,
     )
     fig.update_layout(
@@ -1345,22 +1461,22 @@ def main() -> None:
     render_hero(DEFAULT_DATA_PATH)
 
     # Data source - clearer UI for preloaded data + optional updates
-    st.sidebar.header("📊 Data Source")
+    st.sidebar.header("Data Source")
     
     # Check if preloaded data exists
     has_preloaded = DEFAULT_DATA_PATH.exists()
     
     if has_preloaded:
-        st.sidebar.success("✅ **Data preloaded** — Ready to explore!")
+        st.sidebar.success("**Data preloaded** — ready to explore.")
         st.sidebar.caption("Using: `sales_2016_2026_combined.csv`")
         
         # Expander for optional update
-        with st.sidebar.expander("🔄 Upload updated data (optional)"):
+        with st.sidebar.expander("Upload updated data (optional)"):
             st.markdown("Upload a new CSV to replace the current dataset. "
                        "The file should have the same columns.")
             uploaded_sidebar = st.file_uploader("Drop new CSV here", type=["csv"], key="csv_upload")
     else:
-        st.sidebar.warning("⚠️ No data file found")
+        st.sidebar.warning("No data file found")
         st.sidebar.markdown("Upload your sales CSV to get started:")
         uploaded_sidebar = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="csv_upload")
     
@@ -1373,11 +1489,11 @@ def main() -> None:
     if df is None:
         has_local = any(DATA_DIR.glob("*.csv"))
         if uploaded is None and not has_local:
-            st.info("📋 No CSV detected — showing synthetic sample data for preview.")
+            st.info("No CSV detected — showing synthetic sample data for preview.")
             df = data_prep.make_fake_data()
             source_label = "Synthetic sample data"
         else:
-            st.info("📁 Provide a CSV via upload to explore performance.")
+            st.info("Provide a CSV via upload to explore performance.")
             return
 
     # -------------------------------------------------------------------------
@@ -1394,7 +1510,7 @@ def main() -> None:
     sale_max = df["sale_date"].max() if "sale_date" in df.columns else None
     
     st.sidebar.divider()
-    st.sidebar.subheader("📅 As-of date")
+    st.sidebar.subheader("As-of date")
     asof_date = st.sidebar.date_input(
         "Evaluate pacing as of",
         value=default_asof.date(),
@@ -1447,7 +1563,7 @@ def main() -> None:
         st.markdown('<div class="muted">Exports respect your current filters and as-of date.</div>', unsafe_allow_html=True)
 
     # --- 1) Event Pacing Watchlist (move back up) ---
-    st.subheader(f"1) 📊 Event Pacing Watchlist (as of {asof_ts:%B %d, %Y})")
+    st.subheader(f"1) Event Pacing Watchlist (as of {asof_ts:%B %d, %Y})")
     st.caption(
         "Statuses reflect the current filters on upcoming events; change filters to focus the watchlist. "
         "Baseline pacing chart uses a global historical curve for stability."
@@ -1473,8 +1589,7 @@ def main() -> None:
         st.info("Not enough data to render the pacing curve.")
     else:
         plotly_config = {"displaylogo": False, "modeBarButtonsToRemove": ["toImage"]}
-        pacing_fig = booking_window_fig(baseline_curve, current_curve)
-        pacing_fig.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+        pacing_fig = style_mono(booking_window_fig(baseline_curve, current_curve))
         st.plotly_chart(pacing_fig, use_container_width=True, config=plotly_config)
         st.caption(
             f"Baseline: **Global** (n = {cohort_n:,} past events, stable across filters). "
@@ -1502,7 +1617,7 @@ def main() -> None:
     if fig_heat is None:
         st.info("Not enough data to show pattern. Try widening seasons or channels.")
     else:
-        fig_heat.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+        style_mono(fig_heat)
         st.plotly_chart(fig_heat, use_container_width=True, config=no_zoom_config)
 
     # --- 4) Event Categories: Pre vs Post COVID ---
@@ -1522,20 +1637,20 @@ def main() -> None:
         if cat_pre is None:
             st.info("No pre-COVID data to render.")
         else:
-            cat_pre.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+            style_mono(cat_pre)
             st.plotly_chart(cat_pre, use_container_width=True, config=plotly_config)
     with cols_cat[1]:
         if cat_post is None:
             st.info("No post-COVID data to render.")
         else:
-            cat_post.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+            style_mono(cat_post)
             st.plotly_chart(cat_post, use_container_width=True, config=plotly_config)
 
     st.markdown("**Top categories Pre vs Post COVID (Top 6)**")
     if cat_compare is None:
         st.info("No data for category comparison.")
     else:
-        cat_compare.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+        style_mono(cat_compare)
         st.plotly_chart(cat_compare, use_container_width=True, config=plotly_config)
 
     # --- 5) Top Events: Pre vs Post COVID ---
@@ -1545,7 +1660,7 @@ def main() -> None:
     if ev_compare is None:
         st.info("No events found in both periods.")
     else:
-        ev_compare.update_layout(paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF")
+        style_mono(ev_compare)
         st.plotly_chart(ev_compare, use_container_width=True, config=plotly_config)
 
 
