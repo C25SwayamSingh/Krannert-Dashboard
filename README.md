@@ -36,6 +36,27 @@ pip install -r requirements.txt
 - Drop files under `data/` (e.g., `data/sales_2016_2026_combined.csv`) so they appear in the sidebar picker.
 - Filenames can be anything; only the required columns matter.
 
+## Updating with new season data
+
+Use `data/template_sales_import.csv` as the spreadsheet template — one row per sale
+transaction, same columns as the combined file:
+
+`sale_date, qty_sold, amount, event_part, event_name, event_date, season, source_file`
+
+- `event_part` is the price-category code (SA, SC, UI, YT, C, FA, SU, ...).
+- Dates should be `YYYY-MM-DD`.
+- `season` is the label like `2026-2027`; `source_file` is just a note about where the rows came from.
+
+Two ways to load it:
+
+1. **Quick look (temporary):** export the new season's sales into the template columns,
+   append them to a copy of the combined CSV, and upload it via the sidebar's
+   "Upload updated data". This affects only your browser session.
+2. **Permanent update (live site):** append the new rows to
+   `data/sales_2016_2026_combined.csv` in this repo and push to `main` — Streamlit
+   Cloud redeploys automatically. The dashboard's "as-of" date defaults to the newest
+   `sale_date` in the file, so pacing updates on its own.
+
 ## Data expectations
 
 Input CSV must include (case-insensitive) columns. Extra columns are ignored.

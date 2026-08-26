@@ -274,7 +274,11 @@ def pace_status(gap: float) -> str:
     return "On pace"
 
 
-def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> Tuple[pd.DataFrame, dict, set]:
+def build_watchlist(
+    df_raw: pd.DataFrame,
+    today: Optional[pd.Timestamp] = None,
+    history_df: Optional[pd.DataFrame] = None,
+) -> Tuple[pd.DataFrame, dict, set]:
     """
     Produce the watchlist table with plain-English column names:
       Event | Days to show | Sold so far (%) | Typical by now (%) | Ahead/behind (pts) | Status | Tickets sold | Comparison group
@@ -285,9 +289,14 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
       - Ahead/behind (pts) = Sold so far − Typical by now; Status via ±5 pts
       - Exclude events where Sold so far ≥ 98%
 
+    df_raw selects WHICH upcoming events are evaluated (it may be filtered);
+    history_df, when given, supplies the historical benchmark cohorts — pass
+    the unfiltered dataset so narrowing filters (e.g. a future-only date
+    range) can't hollow out the benchmark.
+
     Returns:
       - watch: DataFrame with watchlist
-      - summary: dict with "behind", "evaluated" counts
+      - summary: dict with "behind", "on_pace", "ahead", "evaluated" counts
       - fallback_tiers: set of tier names used
     """
     if today is None:
@@ -310,7 +319,8 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
     if df.empty:
         return pd.DataFrame(columns=empty_cols), {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}, set()
 
-    medians, finals_lib = build_cohort_library(df)
+    d_hist = _prep(history_df, today) if history_df is not None else df
+    medians, finals_lib = build_cohort_library(d_hist)
 
     # Aggregate tickets so far per event for upcoming events
     up = df[df["event_date"] >= today].copy()
@@ -338,14 +348,37 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
         return pd.DataFrame(columns=empty_cols), {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}, set()
     sold_now["d_bin"] = (sold_now["days_out"] // BIN) * BIN
 
+    # Dict indexes for O(1) cohort lookups — the DataFrame-mask lookups in
+    # _pick_cohort are fine for a handful of events but make early "as-of"
+    # dates (thousands of upcoming units) take minutes.
+    med_idx = {}
+    for t in medians.itertuples(index=False):
+        keys = t.tier.split("|") if t.tier != "all" else []
+        kv = tuple(getattr(t, k, None) for k in keys)
+        med_idx[(t.tier, kv, int(t.d_bin))] = (float(t.median_pct), int(t.n))
+    fin_idx = {}
+    for t in finals_lib.itertuples(index=False):
+        keys = t.tier.split("|") if t.tier != "all" else []
+        kv = tuple(getattr(t, k, None) for k in keys)
+        fin_idx[(t.tier, kv)] = (float(t.median_final), int(t.n_events))
+
+    def pick_fast(r: pd.Series, d_bin: int):
+        for tier_list in DEFAULT_COHORT_TIERS:
+            tier = "|".join(tier_list) if tier_list else "all"
+            kv = tuple(r.get(k) for k in tier_list)
+            hit = med_idx.get((tier, kv, d_bin))
+            fin = fin_idx.get((tier, kv))
+            if hit is not None and fin is not None and hit[1] >= MIN_COHORT:
+                return tier, hit[0], hit[1], fin[0], fin[1]
+        # Rare: no cohort reached MIN_COHORT — fall back to the slow path
+        return _pick_cohort(medians, finals_lib, r, d_bin)
+
     rows = []
     fallback_tiers: set = set()
     summary = {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}
 
     for _, r in sold_now.iterrows():
-        tier, median_at_d, n, baseline_final, n_final = _pick_cohort(
-            medians, finals_lib, r, int(r["d_bin"])
-        )
+        tier, median_at_d, n, baseline_final, n_final = pick_fast(r, int(r["d_bin"]))
         fallback_tiers.add(tier)
 
         # Guard rails

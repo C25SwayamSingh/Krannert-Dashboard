@@ -47,6 +47,8 @@ SURFACE = "#FFFFFF"
 SURFACE_ALT = "#FAFAFA"
 GRID = "#EFEFEF"       # chart gridlines
 BAND = "rgba(23,23,23,0.06)"  # IQR band fill
+RED = "#B42318"        # reserved status accent: "Behind" only
+RED_WASH = "#FBEFEE"   # soft row wash for Behind rows
 FONT_STACK = "'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
 
 
@@ -580,18 +582,21 @@ def render_watchlist_summary(
     upcoming_window_days: int = 120,
     watch_summary: dict | None = None,
 ) -> None:
-    if watchlist_df is None or watchlist_df.empty:
+    # An empty table with evaluated events means every row is ≥98% sold —
+    # fall through so the pills still report the true evaluated counts.
+    has_summary = bool(watch_summary and watch_summary.get("evaluated"))
+    if (watchlist_df is None or watchlist_df.empty) and not has_summary:
         st.caption(f"Showing **0** upcoming events (≤{upcoming_window_days}d) that match your filters.")
         return
 
     # Normalize the status labels robustly
     status_col = None
     for c in ["status", "Status", "STATUS"]:
-        if c in watchlist_df.columns:
+        if watchlist_df is not None and c in watchlist_df.columns:
             status_col = c
             break
 
-    if status_col is None:
+    if status_col is None and not has_summary:
         # No status column; just show the total
         st.caption(f"Showing **{len(watchlist_df)}** upcoming events (≤{upcoming_window_days}d) that match your filters.")
         return
@@ -626,7 +631,7 @@ def render_watchlist_summary(
             font-size: 0.85rem;
             margin-left: 6px;
           }
-          .pill-behind { background: #171717; color: #FFFFFF; }
+          .pill-behind { background: #B42318; color: #FFFFFF; }
           .pill-on { background: #E8E8E8; color: #171717; }
           .pill-ahead { background: #FFFFFF; color: #525252; border: 1px solid #D9D9D9; }
         </style>
@@ -696,10 +701,11 @@ def render_watchlist(
     ]
     display = watch_table[[c for c in display_cols if c in watch_table.columns]].copy()
 
-    # Monochrome rows: Behind rows get a soft gray wash; status is also glyph-coded
+    # Behind rows get a soft red wash (red is reserved for Behind only);
+    # status is also glyph-coded so color is never the only encoding
     def status_color(status: str) -> str:
         if status == "Behind":
-            return "#F5F5F5"
+            return RED_WASH
         return "#FFFFFF"
 
     STATUS_GLYPHS = {"Behind": "● Behind", "On pace": "◐ On pace", "Ahead": "○ Ahead"}
@@ -720,8 +726,13 @@ def render_watchlist(
         else:
             formatted_cols.append(display[col].tolist())
 
-    # Row-wise colors
+    # Row-wise colors; the Status column's text goes red on Behind rows
     row_colors = [[status_color(s) for s in display["status"]]] * len(display_cols)
+    status_font = [RED if s == "Behind" else INK for s in display["status"]]
+    font_colors = [
+        status_font if col == "status" else [INK] * len(display)
+        for col in display_cols
+    ]
 
     fig = go.Figure(
         data=[
@@ -748,7 +759,7 @@ def render_watchlist(
                     fill_color=row_colors,
                     line_color="#F0F0F0",
                     align="left",
-                    font=dict(family=FONT_STACK, color=INK, size=12),
+                    font=dict(family=FONT_STACK, color=font_colors, size=12),
                     height=30,
                 ),
             )
@@ -772,10 +783,19 @@ def render_watchlist(
         behind_count = int((watch_table["status"] == "Behind").sum())
         ahead_count = int((watch_table["status"] == "Ahead").sum())
         on_pace_count = int((watch_table["status"] == "On pace").sum())
+    def status_tile(col, glyph: str, label: str, value: int, accent: str = INK) -> None:
+        col.markdown(
+            f'<div class="card kpi-card" style="margin-bottom:0">'
+            f'<div class="kpi-label"><span style="color:{accent}">{glyph}</span> {label}</div>'
+            f'<div class="kpi-value" style="color:{accent}">{value:,}</div>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
     c1, c2, c3 = st.columns(3)
-    c1.metric("● Behind pace", behind_count)
-    c2.metric("◐ On pace", on_pace_count)
-    c3.metric("○ Ahead of pace", ahead_count)
+    status_tile(c1, "●", "Behind pace", behind_count, accent=RED)
+    status_tile(c2, "◐", "On pace", on_pace_count)
+    status_tile(c3, "○", "Ahead of pace", ahead_count)
 
 
 # ---------------------------------------------------------------------------
@@ -1538,7 +1558,12 @@ def main() -> None:
 
     # Build watchlist using new pacing module with the selected as-of date
     # This computes Cum% as tickets_so_far / median_final_of_cohort (not event's own total)
-    watch_table, watch_summary, fallback_tiers = pacing.build_watchlist(filtered_df, today=asof_ts)
+    # Filters choose WHICH upcoming events are evaluated; the benchmark
+    # cohorts always come from the full dataset so a narrow (e.g. future-only)
+    # date range can't hollow out the historical baseline.
+    watch_table, watch_summary, fallback_tiers = pacing.build_watchlist(
+        filtered_df, today=asof_ts, history_df=df
+    )
 
     # KPIs (use as-of date for time-boxed calculations)
     kpis = compute_kpis(base, watch_summary, asof_ts)
