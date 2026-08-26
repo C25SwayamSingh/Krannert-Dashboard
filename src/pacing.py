@@ -1,11 +1,20 @@
 """
 Pacing module for the Krannert dashboard.
 
-Fixes the 100% issue by comparing:
-  - Cum % = tickets_so_far / median_final_of_cohort (not event's own final)
-  - Median @D = historical median cum% at the same days-out bin from cohort
+The benchmark is SELF-CONSISTENT: for every historical event in a cohort we
+compute the exact same statistic the watchlist computes for an upcoming event —
+tickets sold by day D divided by the cohort's median final sales, carried
+forward to every days-out bin — and "Typical by now" is the median of that
+across cohort events. By construction the median historical event paces at
+gap 0, so Behind/Ahead is a genuinely relative signal.
 
-This gives meaningful pacing comparison for upcoming events.
+Two earlier biases this design removes:
+  - The old benchmark took the median over transaction ROWS present at a bin,
+    so quiet events dropped out of their own baseline and busy/early-selling
+    events dominated it (inflating "typical by now", especially far out).
+  - Upcoming events were normalized by the cohort median final while the
+    benchmark was normalized by each event's OWN final, so smaller-than-median
+    events could never look on pace.
 """
 from __future__ import annotations
 
@@ -81,25 +90,53 @@ def _prep(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.DataFram
         today = pd.Timestamp.today().normalize()
 
     df["days_out"] = (df["event_date"].dt.normalize() - df["sale_date"].dt.normalize()).dt.days
-    df = df[(df["days_out"] >= 0) & (df["days_out"] <= D_MAX)]
-    df["d_bin"] = (df["days_out"] // BIN) * BIN
+    df = df[df["days_out"] >= 0]
+    # Clamp early purchases (>D_MAX days out) into the outermost bin instead of
+    # dropping them, so cumulative curves account for all pre-event sales.
+    df["d_bin"] = (np.minimum(df["days_out"], D_MAX) // BIN) * BIN
     df["_today"] = today
 
     return df
 
 
-def _cum_series(df: pd.DataFrame) -> pd.DataFrame:
-    """Per-event cumulative qty and final totals; cum_pct for HISTORICAL events."""
-    s = df.sort_values(["event_name", "days_out"], ascending=[True, False]).copy()
-    s["cum_qty"] = s.groupby("event_name", sort=False)["qty_sold"].cumsum()
+# The watchlist tracks each (event, event_type) slice as its own row, so the
+# historical cohort curves must be built at the same unit of analysis.
+UNIT_KEYS = ["event_name", "event_type"]
 
-    finals = s.groupby("event_name", as_index=True)["cum_qty"].max().rename("final_qty")
-    s = s.join(finals, on="event_name")
 
-    # historical % (relative to each event's own final)
-    s["hist_cum_pct"] = 100 * s["cum_qty"] / s["final_qty"].replace({0: np.nan})
+def _event_curves(hist: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+    """
+    Per-unit cumulative tickets carried forward to EVERY days-out bin, where a
+    unit is an (event_name, event_type) slice — the same grain as the watchlist.
 
-    return s
+    Returns:
+      - cum: DataFrame indexed by UNIT_KEYS, one column per d_bin (D_MAX..0),
+        holding tickets sold by that bin (0 for bins with no activity yet)
+      - finals: Series of total tickets per unit
+      - meta: DataFrame of cohort keys (event_type, weekday, venue) per unit
+    """
+    bins = list(range(0, D_MAX + 1, BIN))
+    eb = hist.groupby(UNIT_KEYS + ["d_bin"], as_index=False)["qty_sold"].sum()
+    wide = (
+        eb.pivot_table(
+            index=UNIT_KEYS,
+            columns="d_bin",
+            values="qty_sold",
+            aggfunc="sum",
+            fill_value=0,
+        )
+        .reindex(columns=bins, fill_value=0)
+    )
+    cum = wide[bins[::-1]].cumsum(axis=1)
+    finals = wide.sum(axis=1).rename("final_qty")
+    meta = hist.groupby(UNIT_KEYS).agg(
+        weekday=("weekday", "first"),
+        venue=("venue", "first"),
+    )
+    meta["event_type"] = meta.index.get_level_values("event_type")
+    # Rename index levels so "event_type" is unambiguous as a groupby column
+    meta.index = meta.index.set_names(["unit_event_name", "unit_event_type"])
+    return cum, finals, meta
 
 
 def build_cohort_library(
@@ -108,14 +145,15 @@ def build_cohort_library(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Build two libraries:
-      1) MEDIANS: median hist_cum_pct by (tier..., d_bin) with sample size n
-      2) FINALS:  median final_qty by (tier...) to serve as baseline final for upcoming events
+      1) MEDIANS: per (tier..., d_bin), the median across cohort events of
+         min(100, tickets_by_bin / cohort_median_final * 100) — the same
+         statistic the watchlist computes for upcoming events, so the median
+         historical event paces at gap 0 by construction
+      2) FINALS:  median final tickets per cohort, the baseline denominator
+         for upcoming events
     """
-    s = _cum_series(df)
-
-    # past events end strictly before "today"
-    today = s["_today"].iloc[0]
-    hist = s[s["event_date"] < today].copy()
+    today = df["_today"].iloc[0] if not df.empty else pd.Timestamp.today().normalize()
+    hist = df[df["event_date"] < today]
 
     if hist.empty:
         # Return empty DataFrames with correct structure
@@ -124,37 +162,41 @@ def build_cohort_library(
             pd.DataFrame(columns=["tier", "median_final", "n_events"]),
         )
 
+    cum, finals, meta = _event_curves(hist)
+
     frames = []
-    finals = []
+    fin_rows = []
 
     for tier in cohort_tiers:
-        keys = tier + ["d_bin"] if tier else ["d_bin"]
-        g = (
-            hist.groupby(keys, as_index=False)
-            .agg(median_pct=("hist_cum_pct", "median"), n=("event_name", "nunique"))
-        )
-        g["tier"] = "|".join(tier) if tier else "all"
-        frames.append(g)
+        tier_name = "|".join(tier) if tier else "all"
 
-        # median final size per cohort (no d_bin)
-        fk = tier if tier else []
-        if fk:
-            f = (
-                hist.groupby(fk, as_index=False)
-                .agg(median_final=("final_qty", "median"), n_events=("event_name", "nunique"))
-            )
+        if tier:
+            groups = meta.groupby(tier, dropna=False).groups.items()
         else:
-            f = pd.DataFrame(
-                {
-                    "median_final": [hist["final_qty"].median()],
-                    "n_events": [hist["event_name"].nunique()],
-                }
-            )
-        f["tier"] = "|".join(tier) if tier else "all"
-        finals.append(f)
+            groups = [(None, meta.index)]
+
+        for gkey, names in groups:
+            median_final = max(float(finals.loc[names].median()), 1.0)
+            norm = (cum.loc[names] / median_final * 100.0).clip(0, 100)
+            med = norm.median(axis=0)
+
+            g = pd.DataFrame({"d_bin": med.index.astype(int), "median_pct": med.values})
+            g["n"] = len(names)
+            g["tier"] = tier_name
+
+            f = {"tier": tier_name, "median_final": median_final, "n_events": len(names)}
+
+            if tier:
+                key_vals = gkey if isinstance(gkey, tuple) else (gkey,)
+                for k, v in zip(tier, key_vals):
+                    g[k] = v
+                    f[k] = v
+
+            frames.append(g)
+            fin_rows.append(f)
 
     medians = pd.concat(frames, ignore_index=True)
-    finals_lib = pd.concat(finals, ignore_index=True)
+    finals_lib = pd.DataFrame(fin_rows)
 
     return medians, finals_lib
 
@@ -260,19 +302,20 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
         "typical_at_day_pct",
         "gap_pp",
         "tickets_so_far",
+        "tickets_at_risk",
         "status",
         "cohort",
     ]
 
     if df.empty:
-        return pd.DataFrame(columns=empty_cols), {"behind": 0, "evaluated": 0}, set()
+        return pd.DataFrame(columns=empty_cols), {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}, set()
 
     medians, finals_lib = build_cohort_library(df)
 
     # Aggregate tickets so far per event for upcoming events
     up = df[df["event_date"] >= today].copy()
     if up.empty:
-        return pd.DataFrame(columns=empty_cols), {"behind": 0, "evaluated": 0}, set()
+        return pd.DataFrame(columns=empty_cols), {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}, set()
 
     # Get event label if available
     label_col = "event_label" if "event_label" in up.columns else "event_name"
@@ -284,15 +327,20 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
         )
         .agg(
             tickets_so_far=("qty_sold", "sum"),
-            days_out=("days_out", "min"),
             event_label=(label_col, "first"),
         )
     )
+    # Days to show is measured from "today", not from the most recent sale —
+    # otherwise events with stale sales get benchmarked at the wrong bin.
+    sold_now["days_out"] = (sold_now["event_date"].dt.normalize() - today).dt.days
+    sold_now = sold_now[sold_now["days_out"] <= D_MAX]
+    if sold_now.empty:
+        return pd.DataFrame(columns=empty_cols), {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}, set()
     sold_now["d_bin"] = (sold_now["days_out"] // BIN) * BIN
 
     rows = []
     fallback_tiers: set = set()
-    summary = {"behind": 0, "evaluated": 0}
+    summary = {"behind": 0, "on_pace": 0, "ahead": 0, "evaluated": 0}
 
     for _, r in sold_now.iterrows():
         tier, median_at_d, n, baseline_final, n_final = _pick_cohort(
@@ -310,6 +358,10 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
         summary["evaluated"] += 1
         if status == "Behind":
             summary["behind"] += 1
+        elif status == "Ahead":
+            summary["ahead"] += 1
+        elif status == "On pace":
+            summary["on_pace"] += 1
 
         # Build readable cohort label
         cohort_label = _format_cohort_label(tier, n, r)
@@ -322,6 +374,7 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
                 "typical_at_day_pct": round(median_at_d, 1),
                 "gap_pp": round(gap, 1),
                 "tickets_so_far": int(round(tickets_so_far)),
+                "tickets_at_risk": round(max(0.0, -gap) * baseline_final / 100.0, 1),
                 "status": status,
                 "cohort": cohort_label,
             }
@@ -335,8 +388,12 @@ def build_watchlist(df_raw: pd.DataFrame, today: Optional[pd.Timestamp] = None) 
     # Hide sold-out / nearly sold-out rows from the action list (≥98%)
     watch = watch[watch["sold_so_far_pct"] < HIDE_SOLDOUT_AT].copy()
 
-    # Rank by most at-risk first (lowest gap), then by days-out
-    watch = watch.sort_values(["gap_pp", "days_out"], ascending=[True, True]).reset_index(drop=True)
+    # Rank by tickets at risk (gap × typical audience size) so material
+    # shortfalls outrank 1-2 ticket micro-slices with huge percentage gaps,
+    # breaking ties by lowest gap, then by days-out
+    watch = watch.sort_values(
+        ["tickets_at_risk", "gap_pp", "days_out"], ascending=[False, True, True]
+    ).reset_index(drop=True)
 
     # Top 50
     watch = watch.head(50)

@@ -467,7 +467,11 @@ def render_kpis(kpis: dict) -> None:
 # ---------------------------------------------------------------------------
 # Watchlist table (using new pacing module)
 # ---------------------------------------------------------------------------
-def render_watchlist_summary(watchlist_df: pd.DataFrame, upcoming_window_days: int = 120) -> None:
+def render_watchlist_summary(
+    watchlist_df: pd.DataFrame,
+    upcoming_window_days: int = 120,
+    watch_summary: dict | None = None,
+) -> None:
     if watchlist_df is None or watchlist_df.empty:
         st.caption(f"Showing **0** upcoming events (≤{upcoming_window_days}d) that match your filters.")
         return
@@ -484,15 +488,24 @@ def render_watchlist_summary(watchlist_df: pd.DataFrame, upcoming_window_days: i
         st.caption(f"Showing **{len(watchlist_df)}** upcoming events (≤{upcoming_window_days}d) that match your filters.")
         return
 
-    s = (watchlist_df[status_col]
-         .astype(str).str.strip().str.lower()
-         .map({"behind": "Behind", "on pace": "On pace", "ahead": "Ahead"}))
+    # Prefer the full evaluated counts from build_watchlist — the displayed
+    # table is truncated to the most at-risk rows, so counting its statuses
+    # would always look overwhelmingly "behind".
+    if watch_summary and watch_summary.get("evaluated"):
+        n_total = int(watch_summary["evaluated"])
+        n_behind = int(watch_summary.get("behind", 0))
+        n_on = int(watch_summary.get("on_pace", 0))
+        n_ahead = int(watch_summary.get("ahead", 0))
+    else:
+        s = (watchlist_df[status_col]
+             .astype(str).str.strip().str.lower()
+             .map({"behind": "Behind", "on pace": "On pace", "ahead": "Ahead"}))
 
-    counts = s.value_counts().reindex(["Behind", "On pace", "Ahead"], fill_value=0)
-    n_total = int(counts.sum())
-    n_behind = int(counts["Behind"])
-    n_on     = int(counts["On pace"])
-    n_ahead  = int(counts["Ahead"])
+        counts = s.value_counts().reindex(["Behind", "On pace", "Ahead"], fill_value=0)
+        n_total = int(counts.sum())
+        n_behind = int(counts["Behind"])
+        n_on     = int(counts["On pace"])
+        n_ahead  = int(counts["Ahead"])
 
     # Lightweight CSS for compact color pills (keeps current theme)
     # Using .pill-status to avoid conflict with global .pill
@@ -521,7 +534,12 @@ def render_watchlist_summary(watchlist_df: pd.DataFrame, upcoming_window_days: i
     )
 
 
-def render_watchlist(watch_table: pd.DataFrame, fallback_tiers: set, filters_summary: str) -> None:
+def render_watchlist(
+    watch_table: pd.DataFrame,
+    fallback_tiers: set,
+    filters_summary: str,
+    watch_summary: dict | None = None,
+) -> None:
     """Render the event pacing watchlist with Plotly table for visibility."""
     with st.expander("What do these columns mean?"):
         st.markdown("""
@@ -539,9 +557,15 @@ def render_watchlist(watch_table: pd.DataFrame, fallback_tiers: set, filters_sum
         window_days = pacing.D_MAX
     except AttributeError:
         window_days = 120
-    render_watchlist_summary(watch_table, upcoming_window_days=window_days)
+    render_watchlist_summary(watch_table, upcoming_window_days=window_days, watch_summary=watch_summary)
 
     st.caption(filters_summary)
+
+    if watch_summary and watch_summary.get("evaluated", 0) > len(watch_table):
+        st.caption(
+            f"Table lists the {len(watch_table)} most at-risk of the "
+            f"{watch_summary['evaluated']} evaluated events, ranked by tickets at risk."
+        )
 
     if watch_table.empty:
         st.info("No upcoming events in the next 120 days, or not enough historical data to compute pacing benchmarks.")
@@ -622,10 +646,16 @@ def render_watchlist(watch_table: pd.DataFrame, fallback_tiers: set, filters_sum
     fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=min(600, 35 + 30 * len(display) + 60))
     st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
 
-    # Summary stats with emojis
-    behind_count = int((watch_table["status"] == "Behind").sum())
-    ahead_count = int((watch_table["status"] == "Ahead").sum())
-    on_pace_count = int((watch_table["status"] == "On pace").sum())
+    # Summary stats with emojis — use full evaluated counts, not the truncated
+    # most-at-risk table, which would always skew "behind"
+    if watch_summary and watch_summary.get("evaluated"):
+        behind_count = int(watch_summary.get("behind", 0))
+        ahead_count = int(watch_summary.get("ahead", 0))
+        on_pace_count = int(watch_summary.get("on_pace", 0))
+    else:
+        behind_count = int((watch_table["status"] == "Behind").sum())
+        ahead_count = int((watch_table["status"] == "Ahead").sum())
+        on_pace_count = int((watch_table["status"] == "On pace").sum())
     c1, c2, c3 = st.columns(3)
     c1.metric("🔴 Behind pace", behind_count)
     c2.metric("🟨 On pace", on_pace_count)
@@ -1422,7 +1452,7 @@ def main() -> None:
         "Statuses reflect the current filters on upcoming events; change filters to focus the watchlist. "
         "Baseline pacing chart uses a global historical curve for stability."
     )
-    render_watchlist(watch_table, fallback_tiers, filters_summary)
+    render_watchlist(watch_table, fallback_tiers, filters_summary, watch_summary)
 
     # --- 2) Booking Window Pacing ---
     st.subheader("2) Booking Window Pacing")
