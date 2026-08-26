@@ -6,3 +6,5 @@ scipy>=1.11
 python-dateutil>=2.9
 kaleido>=0.2.1
 
+
+# force rebuild 2026-08-26: reload src modules after pacing API change
