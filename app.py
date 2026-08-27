@@ -79,19 +79,81 @@ def inject_styles() -> None:
         [data-testid="stCaptionContainer"], .stCaption { color: #8A8A8A; }
         p, li { color: #303030; }
 
-        /* Sidebar: light gray panel with a hairline divider */
+        /* Sidebar: light panel with a hairline divider */
         [data-testid="stSidebar"] {
             background: #FAFAFA;
             border-right: 1px solid #E6E6E6;
         }
         [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-            font-size: 0.8rem;
+            font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: #525252;
+            letter-spacing: 0.07em;
+            color: #8A8A8A;
             font-weight: 600;
         }
-        [data-testid="stSidebar"] hr { border-color: #E6E6E6; }
+        [data-testid="stSidebar"] hr { border-color: #E6E6E6; margin: 0.75rem 0; }
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0.6rem; }
+
+        /* Brand mark at the top of the sidebar */
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 2px 4px 14px;
+        }
+        .brand-mark {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: #171717;
+            color: #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: -0.02em;
+            flex: none;
+        }
+        .brand-text { line-height: 1.15; }
+        .brand-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #171717;
+            letter-spacing: -0.01em;
+        }
+        .brand-sub { font-size: 11px; color: #8A8A8A; }
+
+        /* Section navigation — icon + label rows, like a standard
+           dashboard's left rail */
+        .nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            color: #303030 !important;
+            text-decoration: none !important;
+            font-size: 13.5px;
+            font-weight: 500;
+            line-height: 1.3;
+            transition: background 0.1s ease, color 0.1s ease;
+        }
+        .nav-item:hover { background: #EFEFEF; color: #171717 !important; }
+        .nav-item svg { flex: none; width: 17px; height: 17px; stroke: #8A8A8A; }
+        .nav-item:hover svg { stroke: #171717; }
+        .nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+                     color: #8A8A8A; font-weight: 600; padding: 6px 10px 2px; }
+
+        /* Page title — large and confident, like a standard dashboard header */
+        .page-title {
+            font-size: 1.7rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: #171717;
+            margin-bottom: 2px;
+        }
 
         /* Cards */
         .card {
@@ -136,25 +198,35 @@ def inject_styles() -> None:
         [data-testid="stAlertContainer"] p { color: #303030 !important; }
         [data-testid="stAlertContainer"] svg { fill: #525252 !important; }
 
-        /* KPI tiles (custom) — equal height so a wrapped label can't
-           push one card out of line with its neighbours */
-        .kpi-card { padding: 14px 16px 12px; }
+        /* KPI tiles — one CSS grid, so all four cards share the exact
+           same height no matter how their labels or notes wrap */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            align-items: stretch;
+            margin: 4px 0 8px;
+        }
+        @media (max-width: 900px) {
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .kpi-card { padding: 16px 18px 14px; }
         .kpi-tile {
-            height: 100%;
-            min-height: 116px;
             display: flex;
             flex-direction: column;
             margin-bottom: 0;
         }
+        /* Label block reserves two lines so every number starts on the
+           same baseline; the note is pinned to the bottom of the card. */
         .kpi-tile-label {
             display: flex;
             align-items: flex-start;
+            justify-content: space-between;
             gap: 6px;
-            min-height: 30px;
+            min-height: 2.6em;
         }
-        .kpi-tile .kpi-value { margin-top: auto; }
-        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { display: flex; }
-        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > div { width: 100%; }
+        .kpi-tile .kpi-value { line-height: 1.15; margin-bottom: 6px; }
+        .kpi-tile .kpi-delta { margin-top: auto; }
 
         /* Info-icon tooltips on the headline numbers */
         .kpi-tooltip-wrap {
@@ -301,6 +373,43 @@ def inject_styles() -> None:
     )
 
 
+# Section anchors, shared between the sidebar nav and the page headings so
+# the two can never drift apart.
+SECTIONS = [
+    ("overview", "Overview", "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"),
+    ("watchlist", "Needs attention", "M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"),
+    ("booking", "Booking pace", "M3 3v18h18M7 15l4-5 4 3 5-7"),
+    ("timing", "When people book", "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"),
+    ("categories", "Categories", "M12 20V10M18 20V4M6 20v-4"),
+    ("returning", "Returning shows", "M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"),
+]
+
+
+def render_sidebar_nav() -> None:
+    """Brand mark plus jump links to each section of the page."""
+    st.sidebar.markdown(
+        '<div class="brand">'
+        '<div class="brand-mark">K</div>'
+        '<div class="brand-text">'
+        '<div class="brand-name">Krannert Center</div>'
+        '<div class="brand-sub">Ticket sales</div>'
+        "</div></div>",
+        unsafe_allow_html=True,
+    )
+    items = "".join(
+        f'<a class="nav-item" href="#{anchor}">'
+        f'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" '
+        f'stroke-linecap="round" stroke-linejoin="round"><path d="{path}"/></svg>'
+        f"<span>{label}</span></a>"
+        for anchor, label, path in SECTIONS
+    )
+    st.sidebar.markdown(
+        f'<div class="nav-label">Sections</div><nav class="nav">{items}</nav>',
+        unsafe_allow_html=True,
+    )
+    st.sidebar.divider()
+
+
 def style_mono(fig: go.Figure) -> go.Figure:
     """Apply the monochrome chart style: Inter, white surface, recessive grid/axes."""
     fig.update_layout(
@@ -392,7 +501,8 @@ def load_dataset(uploaded_file, local_path: str | Path) -> tuple[pd.DataFrame | 
 def render_hero(preloaded_path: Path) -> None:
     """Hero section with minimal copy; uploads handled in sidebar."""
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Krannert Sales Insights")
+    st.markdown('<span id="overview"></span>', unsafe_allow_html=True)
+    st.markdown('<div class="page-title">Krannert Sales Insights</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="muted">See which upcoming shows are selling behind pace, '
         "when audiences book, and how categories have recovered since COVID.</div>",
@@ -552,87 +662,77 @@ def compute_kpis(base: pd.DataFrame, watch_summary: dict, today: pd.Timestamp) -
     }
 
 
-def kpi_card(
-    col,
+def _kpi_card_html(
     label: str,
     value: str,
     note: str,
     help_text: str,
     accent: str = INK,
     align: str = "left",
-) -> None:
-    """
-    One headline number as a self-contained card.
-
-    Built as a single block rather than label + st.metric + caption so that
-    every tile is the same height even when a label wraps to two lines.
-    """
+) -> str:
+    """One headline number as a self-contained card (HTML fragment)."""
     safe_help = help_text.replace('"', "&quot;")
     anchor = "right: 0; left: auto;" if align == "right" else "left: 0; right: auto;"
-    col.markdown(
-        f"""
-        <div class="card kpi-card kpi-tile">
-          <div class="kpi-label kpi-tile-label">
-            {label}
-            <span class="kpi-tooltip-wrap">
-              <span class="kpi-tooltip-icon">i</span>
-              <span class="kpi-tooltip-text" style="{anchor}">{safe_help}</span>
-            </span>
-          </div>
-          <div class="kpi-value" style="color:{accent}">{value}</div>
-          <div class="kpi-delta">{note}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    return (
+        '<div class="card kpi-card kpi-tile">'
+        f'<div class="kpi-label kpi-tile-label"><span>{label}</span>'
+        '<span class="kpi-tooltip-wrap"><span class="kpi-tooltip-icon">i</span>'
+        f'<span class="kpi-tooltip-text" style="{anchor}">{safe_help}</span></span></div>'
+        f'<div class="kpi-value" style="color:{accent}">{value}</div>'
+        f'<div class="kpi-delta">{note}</div>'
+        "</div>"
     )
 
 
 def render_kpis(kpis: dict) -> None:
-    col1, col2, col3, col4 = st.columns(4)
-
+    """
+    All four headline numbers in ONE markdown block laid out with CSS grid,
+    so the cards are equal-height by construction — Streamlit columns wrap
+    each card in its own div stack and the heights drift apart.
+    """
     trend = ""
     if kpis["delta_30d"] is not None:
         pct = kpis["delta_30d"] * 100
         direction = "more" if pct >= 0 else "fewer"
         trend = f"{abs(pct):.0f}% {direction} than the 30 days before"
 
-    kpi_card(
-        col1,
-        "Tickets sold recently",
-        _format_int(kpis["tickets_30d"]),
-        trend or "in the last 30 days",
-        "Tickets sold in the last 30 days, compared with the 30 days before that.",
-    )
-    kpi_card(
-        col2,
-        "Average ticket price",
-        _format_currency(kpis["avg_price_30d"]),
-        "over the last 30 days",
-        "What the average ticket actually sold for over the last 30 days, "
-        "including discounted and free tickets.",
-    )
-    kpi_card(
-        col3,
-        "Shows coming up",
-        _format_int(kpis["open_events"]),
-        "in the next 30 days",
-        "Performances happening in the next 30 days that are still selling tickets.",
-        align="right",
-    )
     behind_note = (
         f"{kpis['behind_detail']} shows" if kpis["behind_detail"] != "–" else "nothing to measure"
     )
-    kpi_card(
-        col4,
-        "Selling behind pace",
-        _format_percent(kpis["behind_pct"], decimals=0),
-        behind_note,
-        "Of the upcoming shows we can measure, the share selling slower than similar "
-        "past shows were at the same point before their date. These are the ones worth "
-        "a marketing or pricing look.",
-        accent=RED if kpis["behind_pct"] > 0 else INK,
-        align="right",
-    )
+
+    cards = [
+        _kpi_card_html(
+            "Tickets sold recently",
+            _format_int(kpis["tickets_30d"]),
+            trend or "in the last 30 days",
+            "Tickets sold in the last 30 days, compared with the 30 days before that.",
+        ),
+        _kpi_card_html(
+            "Average ticket price",
+            _format_currency(kpis["avg_price_30d"]),
+            "over the last 30 days",
+            "What the average ticket actually sold for over the last 30 days, "
+            "including discounted and free tickets.",
+        ),
+        _kpi_card_html(
+            "Shows coming up",
+            _format_int(kpis["open_events"]),
+            "in the next 30 days",
+            "Performances happening in the next 30 days that are still selling tickets.",
+            align="right",
+        ),
+        _kpi_card_html(
+            "Selling behind pace",
+            _format_percent(kpis["behind_pct"], decimals=0),
+            behind_note,
+            "Of the upcoming shows we can measure, the share selling slower than similar "
+            "past shows were at the same point before their date. These are the ones worth "
+            "a marketing or pricing look.",
+            accent=RED if kpis["behind_pct"] > 0 else INK,
+            align="right",
+        ),
+    ]
+    st.markdown(f'<div class="kpi-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1616,6 +1716,8 @@ def main() -> None:
     # Hero section (top of page)
     render_hero(DEFAULT_DATA_PATH)
 
+    render_sidebar_nav()
+
     # Data source - clearer UI for preloaded data + optional updates
     st.sidebar.header("Data")
     
@@ -1730,7 +1832,7 @@ def main() -> None:
     render_price_code_guide(df)
 
     # --- 1) Event Pacing Watchlist (move back up) ---
-    st.subheader("Which upcoming shows need attention?")
+    st.subheader("Which upcoming shows need attention?", anchor="watchlist")
     st.caption(
         f"Ticket sales are counted through {asof_ts:%B %d, %Y}. Each show is compared with "
         "similar shows from past seasons at the same point before their date."
@@ -1738,7 +1840,7 @@ def main() -> None:
     render_watchlist(watch_table, fallback_tiers, filters_summary, watch_summary)
 
     # --- 2) Booking Window Pacing ---
-    st.subheader("When do people buy their tickets?")
+    st.subheader("When do people buy their tickets?", anchor="booking")
     with st.expander("How to read"):
         st.markdown(
             "This shows how ticket sales usually build in the four months before a show.\n\n"
@@ -1765,7 +1867,7 @@ def main() -> None:
         )
 
     # --- 3) Sales Timing Heatmap (directly under booking) ---
-    st.subheader("How far ahead do people book?")
+    st.subheader("How far ahead do people book?", anchor="timing")
     st.caption("Darker squares are where most ticket sales happen. Rows are the day of the week the ticket was bought; columns are how far ahead of the show it was bought.")
     no_zoom_config = {
         "displaylogo": False,
@@ -1789,7 +1891,7 @@ def main() -> None:
         st.plotly_chart(fig_heat, use_container_width=True, config=no_zoom_config)
 
     # --- 4) Event Categories: Pre vs Post COVID ---
-    st.subheader("Which kinds of shows recovered after COVID?")
+    st.subheader("Which kinds of shows recovered after COVID?", anchor="categories")
     st.caption("Total tickets sold by category. \"Before\" covers sales up to March 2020; \"after\" covers sales from July 2021 onward.")
     with st.expander("How to read"):
         st.markdown(
@@ -1822,7 +1924,7 @@ def main() -> None:
         st.plotly_chart(cat_compare, use_container_width=True, config=plotly_config)
 
     # --- 5) Top Events: Pre vs Post COVID ---
-    st.subheader("How did returning shows do?")
+    st.subheader("How did returning shows do?", anchor="returning")
     st.caption("Shows that ran both before and after the shutdown, so the two periods are directly comparable.")
     ev_compare = fig_top_events_pre_post(df, k=12)
     if ev_compare is None:
