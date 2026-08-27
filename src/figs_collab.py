@@ -29,16 +29,24 @@ def _ensure(df: pd.DataFrame) -> pd.DataFrame:
     return z
 
 
+# Raw exports prefix performances with a weekday abbreviation ("Sa/The Nutcracker")
+_WEEKDAY_PREFIX = re.compile(r"^(Mo|Tu|We|Th|Fr|Sa|Su)/", re.IGNORECASE)
+
+
+def _clean_name(name: str) -> str:
+    return _WEEKDAY_PREFIX.sub("", str(name).strip())
+
+
 def _categorize(name: str) -> str:
     n = str(name or "").lower()
     if re.search(r"(theat(er|re)|play|drama|musical|opera|operetta|ballet|nutcracker)", n):
         return "Theatre"
     if re.search(r"(symph(ony|onic)|philharm|orchestra|concerto|chamber|baroque|quartet|classical)", n):
-        return "Music—Classical"
+        return "Classical Music"
     if re.search(r"jazz", n):
-        return "Music—Jazz"
+        return "Jazz"
     if re.search(r"(rock|pop|folk|indie|singer[- ]songwriter)", n):
-        return "Music—Folk/Rock/Pop"
+        return "Folk, Rock & Pop"
     if re.search(r"(family|kids|children|youth|junior)", n):
         return "Family Fun"
     if re.search(r"\bdance\b", n):
@@ -46,14 +54,14 @@ def _categorize(name: str) -> str:
     if re.search(r"circus", n):
         return "Circus Arts"
     if re.search(r"(lecture|talk|exhibit|symposium)", n):
-        return "Lecture/Exhibit"
+        return "Lectures & Exhibits"
     if re.search(r"(festival|series|gala|residency|workshop|special)", n):
         return "Special Programs"
     if re.search(r"world|global|international|afro|latin|celtic|klezmer|tabla|sitar", n):
         return "World/Global"
     if re.search(r"\bmusic\b", n):
         return "Music"
-    return "Other (Unmapped)"
+    return "Uncategorized"
 
 
 def _category_totals(df: pd.DataFrame, drop_other: bool = True) -> pd.Series:
@@ -62,8 +70,8 @@ def _category_totals(df: pd.DataFrame, drop_other: bool = True) -> pd.Series:
         return pd.Series(dtype=float)
     d["event_category"] = d["event_name"].apply(_categorize)
     s = d.groupby("event_category", dropna=False)["qty_sold"].sum().sort_values(ascending=False)
-    if drop_other and "Other (Unmapped)" in s.index:
-        s = s.drop("Other (Unmapped)")
+    if drop_other and "Uncategorized" in s.index:
+        s = s.drop("Uncategorized")
     return s
 
 
@@ -109,8 +117,8 @@ def fig_top_categories_pre_post(df: pd.DataFrame, top_n: int = 6) -> go.Figure:
     post_y = post.reindex(cats).fillna(0)
 
     fig = go.Figure()
-    fig.add_bar(name="Pre-2020", x=cats, y=pre_y.values, marker_color=GRAY_SERIES)
-    fig.add_bar(name="Post-2021", x=cats, y=post_y.values, marker_color=INK)
+    fig.add_bar(name="Before COVID (through Feb 2020)", x=cats, y=pre_y.values, marker_color=GRAY_SERIES)
+    fig.add_bar(name="After COVID (July 2021 on)", x=cats, y=post_y.values, marker_color=INK)
     fig.update_layout(
         barmode="group",
         yaxis_title="Tickets sold",
@@ -131,9 +139,10 @@ def fig_top_events_pre_post(df: pd.DataFrame, k: int = 12) -> go.Figure:
     pre, post = pre.loc[common], post.loc[common]
     top = (pre + post).sort_values(ascending=False).head(k).index
 
+    labels = [_clean_name(n) for n in top]
     fig = go.Figure()
-    fig.add_bar(name="Pre-2020", x=top, y=pre.reindex(top).fillna(0).values, marker_color=GRAY_SERIES)
-    fig.add_bar(name="Post-2021", x=top, y=post.reindex(top).fillna(0).values, marker_color=INK)
+    fig.add_bar(name="Before COVID (through Feb 2020)", x=labels, y=pre.reindex(top).fillna(0).values, marker_color=GRAY_SERIES)
+    fig.add_bar(name="After COVID (July 2021 on)", x=labels, y=post.reindex(top).fillna(0).values, marker_color=INK)
     fig.update_layout(
         barmode="group",
         yaxis_title="Tickets sold",

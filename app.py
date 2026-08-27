@@ -3,6 +3,7 @@ Krannert Dashboard — Streamlit application
 """
 from __future__ import annotations
 
+import re
 from datetime import date
 from pathlib import Path
 
@@ -135,8 +136,72 @@ def inject_styles() -> None:
         [data-testid="stAlertContainer"] p { color: #303030 !important; }
         [data-testid="stAlertContainer"] svg { fill: #525252 !important; }
 
-        /* KPI tiles (custom) */
+        /* KPI tiles (custom) — equal height so a wrapped label can't
+           push one card out of line with its neighbours */
         .kpi-card { padding: 14px 16px 12px; }
+        .kpi-tile {
+            height: 100%;
+            min-height: 116px;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0;
+        }
+        .kpi-tile-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            min-height: 30px;
+        }
+        .kpi-tile .kpi-value { margin-top: auto; }
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { display: flex; }
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > div { width: 100%; }
+
+        /* Info-icon tooltips on the headline numbers */
+        .kpi-tooltip-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            flex: none;
+        }
+        .kpi-tooltip-icon {
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #EDEDED;
+            color: #525252;
+            font-size: 10px;
+            font-weight: 600;
+            flex: none;
+        }
+        .kpi-tooltip-icon:hover + .kpi-tooltip-text,
+        .kpi-tooltip-text:hover { visibility: visible; opacity: 1; }
+        .kpi-tooltip-text {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: 100%;
+            margin-bottom: 6px;
+            background: #171717;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+            width: max-content;
+            max-width: min(280px, 40vw);
+            white-space: normal;
+            overflow-wrap: break-word;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            transition: opacity 0.1s ease-in-out;
+            line-height: 1.45;
+        }
         .kpi-label {
             font-size: 11px;
             letter-spacing: 0.06em;
@@ -264,67 +329,23 @@ def style_mono(fig: go.Figure) -> go.Figure:
     return fig
 
 
-def label_with_help(text: str, help_text: str) -> None:
-    """Render a label with a small info icon and instant CSS tooltip."""
-    # Escape quotes in help text for HTML attribute
-    safe_help = help_text.replace('"', '&quot;').replace("'", "&#39;")
-    st.markdown(
-        f"""
-        <style>
-            .kpi-tooltip-wrap {{
-                position: relative;
-                display: inline-flex;
-                align-items: center;
-            }}
-            .kpi-tooltip-icon {{
-                cursor: pointer;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                background: #EDEDED;
-                color: #525252;
-                font-size: 10px;
-                font-weight: 600;
-            }}
-            .kpi-tooltip-icon:hover + .kpi-tooltip-text,
-            .kpi-tooltip-text:hover {{
-                visibility: visible;
-                opacity: 1;
-            }}
-            .kpi-tooltip-text {{
-                visibility: hidden;
-                opacity: 0;
-                position: absolute;
-                left: 0;
-                bottom: 100%;
-                margin-bottom: 6px;
-                background: #171717;
-                color: #fff;
-                padding: 8px 12px;
-                border-radius: 6px;
-                font-size: 12px;
-                font-weight: 400;
-                font-style: normal;
-                width: 260px;
-                z-index: 1000;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-                transition: opacity 0.1s ease-in-out;
-                line-height: 1.4;
-            }}
-        </style>
-        <div style="display: flex; align-items: center; margin-bottom: 4px;">
-            <strong style="margin-right: 6px;">{text}</strong>
-            <span class="kpi-tooltip-wrap">
-                <span class="kpi-tooltip-icon">i</span>
-                <span class="kpi-tooltip-text">{safe_help}</span>
-            </span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+# Raw exports prefix the performance with a weekday abbreviation ("Th/Hamlet")
+# and suffix the price code ("Hamlet – UI"). The dashboard shows the weekday
+# and price category in their own words, so strip both from display names.
+_WEEKDAY_PREFIX = re.compile(r"^(Mo|Tu|We|Th|Fr|Sa|Su)/", re.IGNORECASE)
+
+
+def prettify_event(label: str) -> str:
+    """'Th/The Play That Goes Wrong – UI' -> 'The Play That Goes Wrong (UI tickets)'."""
+    if not isinstance(label, str):
+        return str(label)
+    text = _WEEKDAY_PREFIX.sub("", label.strip())
+    if " – " in text:
+        name, _, code = text.rpartition(" – ")
+        code = code.strip()
+        if name and code:
+            return f"{name.strip()} ({code} tickets)"
+    return text
 
 
 def _format_int(value: float | int | None) -> str:
@@ -373,8 +394,8 @@ def render_hero(preloaded_path: Path) -> None:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Krannert Sales Insights")
     st.markdown(
-        '<div class="muted">Track booking pace, heatmap demand, and pre/post shifts. '
-        "Use the sidebar to swap CSVs.</div>",
+        '<div class="muted">See which upcoming shows are selling behind pace, '
+        "when audiences book, and how categories have recovered since COVID.</div>",
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -394,20 +415,19 @@ def summarize_filters(filters: dict) -> str:
         return f"{label}: {snippet}"
 
     all_seasons = filters.get("seasons") or []
-    seasons_text = (
-        f"Seasons: all {len(all_seasons)} ({all_seasons[0]}–{all_seasons[-1]})"
-        if all_seasons
-        else "Seasons: All"
-    )
-    channels_text = summarize(filters.get("channels") or [], "Channel")
+    parts = []
+    if all_seasons:
+        parts.append(f"All {len(all_seasons)} seasons ({all_seasons[0]} to {all_seasons[-1]})")
+
+    channels = filters.get("channels") or []
+    if channels:
+        parts.append(summarize(channels, "Sold through"))
 
     start, end = filters.get("date_range", (None, None))
     if start is not None and end is not None:
-        date_text = f"Dates: {start.date():%b %d %Y} → {end.date():%b %d %Y}"
-    else:
-        date_text = "Dates: All"
+        parts.append(f"shows between {start.date():%b %d, %Y} and {end.date():%b %d, %Y}")
 
-    return " | ".join([seasons_text, channels_text, date_text])
+    return "Showing: " + "; ".join(parts) if parts else ""
 
 
 def default_filter_bounds(df: pd.DataFrame) -> dict:
@@ -437,7 +457,7 @@ def default_filter_bounds(df: pd.DataFrame) -> dict:
 
 def sidebar_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, str]:
     defaults = default_filter_bounds(df)
-    st.sidebar.subheader("Filters")
+    st.sidebar.subheader("What is shown")
 
     # Seasons are shown, not filtered. Every season in the file is always
     # included: the historical seasons are what the pacing benchmarks are
@@ -448,21 +468,23 @@ def sidebar_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, str]:
     if seasons:
         st.sidebar.markdown("**Seasons included**")
         st.sidebar.caption(
-            f"All {len(seasons)} in the data — {seasons[0]} through {seasons[-1]}. "
-            "Use the event date range below to narrow the view."
+            f"All {len(seasons)} seasons in the file, {seasons[0]} through {seasons[-1]}. "
+            "Past seasons are what upcoming shows get compared against, so they are always included. "
+            "To narrow the view, use the show date range below."
         )
 
     channels = sorted(df["channel"].dropna().unique()) if "channel" in df.columns else []
     selected_channels = st.sidebar.multiselect(
-        "Channel", channels, default=channels, placeholder="All channels"
+        "Sold through", channels, default=channels, placeholder="All sales channels"
     )
 
     min_date, max_date = defaults["date_bounds"]
     date_range = st.sidebar.date_input(
-        "Event date range",
+        "Show date range",
         value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date,
+        help="Limits the view to performances happening between these two dates.",
     )
     if isinstance(date_range, tuple):
         start_date, end_date = date_range
@@ -530,59 +552,87 @@ def compute_kpis(base: pd.DataFrame, watch_summary: dict, today: pd.Timestamp) -
     }
 
 
+def kpi_card(
+    col,
+    label: str,
+    value: str,
+    note: str,
+    help_text: str,
+    accent: str = INK,
+    align: str = "left",
+) -> None:
+    """
+    One headline number as a self-contained card.
+
+    Built as a single block rather than label + st.metric + caption so that
+    every tile is the same height even when a label wraps to two lines.
+    """
+    safe_help = help_text.replace('"', "&quot;")
+    anchor = "right: 0; left: auto;" if align == "right" else "left: 0; right: auto;"
+    col.markdown(
+        f"""
+        <div class="card kpi-card kpi-tile">
+          <div class="kpi-label kpi-tile-label">
+            {label}
+            <span class="kpi-tooltip-wrap">
+              <span class="kpi-tooltip-icon">i</span>
+              <span class="kpi-tooltip-text" style="{anchor}">{safe_help}</span>
+            </span>
+          </div>
+          <div class="kpi-value" style="color:{accent}">{value}</div>
+          <div class="kpi-delta">{note}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_kpis(kpis: dict) -> None:
     col1, col2, col3, col4 = st.columns(4)
 
-    delta_display = None
+    trend = ""
     if kpis["delta_30d"] is not None:
-        delta_display = _format_percent(kpis["delta_30d"] * 100)
+        pct = kpis["delta_30d"] * 100
+        direction = "more" if pct >= 0 else "fewer"
+        trend = f"{abs(pct):.0f}% {direction} than the 30 days before"
 
-    with col1:
-        label_with_help(
-            "Tickets last 30 days",
-            "Tickets sold in the last 30 days. Delta vs the prior 30 days.",
-        )
-        st.metric(
-            label="Tickets last 30 days",
-            value=_format_int(kpis["tickets_30d"]),
-            delta=delta_display,
-            label_visibility="collapsed",
-        )
-
-    with col2:
-        label_with_help(
-            "Avg price last 30 days",
-            "Average realized price per ticket over the last 30 days.",
-        )
-        st.metric(
-            label="Avg price last 30 days",
-            value=_format_currency(kpis["avg_price_30d"]),
-            label_visibility="collapsed",
-        )
-
-    with col3:
-        label_with_help(
-            "Open events next 30 days",
-            "Distinct events scheduled in the next 30 days that are still on sale.",
-        )
-        st.metric(
-            label="Open events next 30 days",
-            value=_format_int(kpis["open_events"]),
-            label_visibility="collapsed",
-        )
-
-    with col4:
-        label_with_help(
-            "% events behind pace (≤120d)",
-            "Share of upcoming events (≤120 days out) selling slower than their historical median at the same days-out. These are the top marketing/price-review priorities.",
-        )
-        st.metric(
-            label="% events behind pace",
-            value=_format_percent(kpis["behind_pct"]),
-            delta=kpis["behind_detail"],
-            delta_color="inverse",
-            label_visibility="collapsed",
-        )
+    kpi_card(
+        col1,
+        "Tickets sold recently",
+        _format_int(kpis["tickets_30d"]),
+        trend or "in the last 30 days",
+        "Tickets sold in the last 30 days, compared with the 30 days before that.",
+    )
+    kpi_card(
+        col2,
+        "Average ticket price",
+        _format_currency(kpis["avg_price_30d"]),
+        "over the last 30 days",
+        "What the average ticket actually sold for over the last 30 days, "
+        "including discounted and free tickets.",
+    )
+    kpi_card(
+        col3,
+        "Shows coming up",
+        _format_int(kpis["open_events"]),
+        "in the next 30 days",
+        "Performances happening in the next 30 days that are still selling tickets.",
+        align="right",
+    )
+    behind_note = (
+        f"{kpis['behind_detail']} shows" if kpis["behind_detail"] != "–" else "nothing to measure"
+    )
+    kpi_card(
+        col4,
+        "Selling behind pace",
+        _format_percent(kpis["behind_pct"], decimals=0),
+        behind_note,
+        "Of the upcoming shows we can measure, the share selling slower than similar "
+        "past shows were at the same point before their date. These are the ones worth "
+        "a marketing or pricing look.",
+        accent=RED if kpis["behind_pct"] > 0 else INK,
+        align="right",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -649,13 +699,88 @@ def render_watchlist_summary(
     """, unsafe_allow_html=True)
 
     st.markdown(
-        (f"**Showing {n_total} upcoming events (≤{upcoming_window_days}d) that match your filters —** "
-         f"<span class='pill-status pill-behind'>● {n_behind} behind</span> "
-         f"<span class='pill-status pill-on'>◐ {n_on} on pace</span> "
-         f"<span class='pill-status pill-ahead'>○ {n_ahead} ahead</span>."
+        (f"**{n_total} shows are coming up in the next {upcoming_window_days} days:** "
+         f"<span class='pill-status pill-behind'>{n_behind} behind pace</span> "
+         f"<span class='pill-status pill-on'>{n_on} on pace</span> "
+         f"<span class='pill-status pill-ahead'>{n_ahead} ahead</span>"
         ),
         unsafe_allow_html=True
     )
+
+
+def render_price_code_guide(df: pd.DataFrame) -> None:
+    """
+    Reference table for the box-office price codes that appear throughout the
+    dashboard. We report what the data shows (volume, average price) rather
+    than guessing at what each code stands for.
+    """
+    if "event_part" not in df.columns:
+        return
+
+    sold = df[(df["qty_sold"] > 0) & df["event_part"].notna()].copy()
+    sold["event_part"] = sold["event_part"].astype(str).str.strip().str.upper()
+    sold = sold[sold["event_part"] != ""]
+    if sold.empty:
+        return
+
+    g = (
+        sold.groupby("event_part")
+        .agg(tickets=("qty_sold", "sum"), revenue=("amount", "sum"))
+        .sort_values("tickets", ascending=False)
+        .head(12)
+    )
+    g["avg"] = (g["revenue"] / g["tickets"]).fillna(0)
+    total = sold["qty_sold"].sum()
+
+    with st.expander("What do the ticket codes (UI, SA, SC…) mean?"):
+        st.markdown(
+            "These are your box-office price categories, carried straight through "
+            "from the sales export. We do not rename them, so they match what your "
+            "ticketing system shows. Here are the most common ones, with what they "
+            "actually sold for:"
+        )
+        table = pd.DataFrame(
+            {
+                "Code": g.index,
+                "Tickets sold": [f"{int(t):,}" for t in g["tickets"]],
+                "Share of all tickets": [f"{t / total:.0%}" for t in g["tickets"]],
+                "Average price": [f"${a:,.2f}" for a in g["avg"]],
+            }
+        )
+        st.dataframe(table, hide_index=True)
+        st.caption(
+            "A $0.00 average means those tickets are comps or otherwise free. "
+            "If you would like these shown by name instead of code, send us the "
+            "list your box office uses and we will label them."
+        )
+
+
+# Plain-English column headings for the watchlist table
+HEADER_LABELS = {
+    "event": "<b>Show</b>",
+    "days_out": "<b>Days until show</b>",
+    "sold_so_far_pct": "<b>Sold so far</b>",
+    "typical_at_day_pct": "<b>Usually sold by now</b>",
+    "gap_pp": "<b>Difference</b>",
+    "tickets_so_far": "<b>Tickets sold</b>",
+    "tickets_at_risk": "<b>Tickets at risk</b>",
+    "status": "<b>Status</b>",
+    "cohort": "<b>Compared with</b>",
+}
+
+# Relative column widths — show titles and the comparison note need the room;
+# the numeric columns are narrow, so they stop wrapping onto three lines.
+COLUMN_WIDTHS = {
+    "event": 2.6,
+    "days_out": 1.0,
+    "sold_so_far_pct": 0.95,
+    "typical_at_day_pct": 1.15,
+    "gap_pp": 0.95,
+    "tickets_so_far": 0.95,
+    "tickets_at_risk": 0.95,
+    "status": 0.85,
+    "cohort": 2.0,
+}
 
 
 def render_watchlist(
@@ -665,17 +790,26 @@ def render_watchlist(
     watch_summary: dict | None = None,
 ) -> None:
     """Render the event pacing watchlist with Plotly table for visibility."""
-    with st.expander("What do these columns mean?"):
+    with st.expander("How to read this table"):
         st.markdown("""
-- **Days-out**: Days until the event (e.g., 45 = event is 45 days away).
-- **Sold so far (%)**: 100 × tickets sold so far ÷ typical final audience size.
-- **Typical at this day (%)**: Median sell-through for similar past events at the same days-out.
-- **Gap vs typical (pp)**: *Sold so far – Typical at this day* (percentage points). Negative = behind; positive = ahead.
-- **Status**: Ahead / On pace / Behind (on-pace band = −5 to +5 pp).
-- **Tickets so far**: Raw ticket count sold to date for the event.
-- **Cohort**: Comparison group used (e.g., event type; event type + weekday/+venue; or global when history is thin).
+Each row is one upcoming show. We compare how many tickets it has sold so far
+against how many similar shows had sold at the same point before their date.
+
+- **Days until show** — how long until the performance.
+- **Sold so far** — tickets sold, as a share of what a similar show usually sells in total.
+- **Usually sold by now** — where similar past shows stood at this same point.
+- **Difference** — how far ahead or behind the show is. A difference of −20 means
+  it has sold 20% less of its expected audience than usual by this point.
+- **Tickets sold** — the actual ticket count so far.
+- **At risk** — roughly how many tickets the show is short, if the gap does not close.
+- **Status** — "Behind" if it is more than 5 points under the usual pace,
+  "Ahead" if more than 5 points over, "On pace" in between.
+- **Compared with** — the group of past shows used as the yardstick.
+
+Codes like UI, SA and SC are your own box-office price categories. The same
+performance appears once per category, because each one sells at its own pace.
         """)
-    
+
     # Render concise summary
     try:
         window_days = pacing.D_MAX
@@ -683,21 +817,16 @@ def render_watchlist(
         window_days = 120
     render_watchlist_summary(watch_table, upcoming_window_days=window_days, watch_summary=watch_summary)
 
-    st.caption(filters_summary)
+    if watch_table.empty:
+        st.info("No shows are coming up in the next 120 days, or there is not enough past data to compare against.")
+        return
 
     if watch_summary and watch_summary.get("evaluated", 0) > len(watch_table):
         st.caption(
-            f"Table lists the {len(watch_table)} most at-risk of the "
-            f"{watch_summary['evaluated']} evaluated events, ranked by tickets at risk."
+            f"The table below lists the {len(watch_table)} shows most at risk, "
+            f"out of {watch_summary['evaluated']} we can measure. "
+            "Shows closest to selling out are left off."
         )
-
-    if watch_table.empty:
-        st.info("No upcoming events in the next 120 days, or not enough historical data to compute pacing benchmarks.")
-        return
-
-    if fallback_tiers:
-        tiers = {pacing.TIER_LABELS.get(t, t) for t in fallback_tiers}
-        st.caption(f"Cohort used: {', '.join(sorted(tiers))}")
 
     # Column order and configs
     display_cols = [
@@ -707,28 +836,30 @@ def render_watchlist(
         "typical_at_day_pct",
         "gap_pp",
         "tickets_so_far",
+        "tickets_at_risk",
         "status",
         "cohort",
     ]
     display = watch_table[[c for c in display_cols if c in watch_table.columns]].copy()
+    display_cols = [c for c in display_cols if c in display.columns]
 
-    # Behind rows get a soft red wash (red is reserved for Behind only);
-    # status is also glyph-coded so color is never the only encoding
+    # Behind rows get a soft red wash. Red is reserved for Behind, and the
+    # status word itself carries the meaning, so color is never the only cue.
     def status_color(status: str) -> str:
         if status == "Behind":
             return RED_WASH
         return "#FFFFFF"
 
-    STATUS_GLYPHS = {"Behind": "● Behind", "On pace": "◐ On pace", "Ahead": "○ Ahead"}
-
-    # Format values for display
+    # Values read as plain numbers: whole percents, signed differences, no
+    # decimals to squint at.
     fmt = {
-        "days_out": lambda v: f"{v:d}",
-        "sold_so_far_pct": lambda v: f"{v:.1f}%",
-        "typical_at_day_pct": lambda v: f"{v:.1f}%",
-        "gap_pp": lambda v: f"{v:.1f}",
+        "event": prettify_event,
+        "days_out": lambda v: "Today" if v == 0 else ("1 day" if v == 1 else f"{v:d} days"),
+        "sold_so_far_pct": lambda v: f"{v:.0f}%",
+        "typical_at_day_pct": lambda v: f"{v:.0f}%",
+        "gap_pp": lambda v: f"{v:+.0f}",
         "tickets_so_far": lambda v: f"{int(v):,}",
-        "status": lambda v: STATUS_GLYPHS.get(v, v),
+        "tickets_at_risk": lambda v: "—" if v <= 0 else f"{int(round(v)):,}",
     }
     formatted_cols = []
     for col in display_cols:
@@ -748,16 +879,10 @@ def render_watchlist(
     fig = go.Figure(
         data=[
             go.Table(
+                columnwidth=[COLUMN_WIDTHS.get(c, 1.0) for c in display_cols],
                 header=dict(
                     values=[
-                        "<b>Event</b>",
-                        "<b>Days-out</b>",
-                        "<b>Sold so far (%)</b>",
-                        "<b>Typical at this day (%)</b>",
-                        "<b>Gap vs typical (pp)</b>",
-                        "<b>Tickets so far</b>",
-                        "<b>Status</b>",
-                        "<b>Cohort</b>",
+                        HEADER_LABELS.get(c, c) for c in display_cols
                     ],
                     fill_color=SURFACE_ALT,
                     line_color=BORDER,
@@ -794,19 +919,20 @@ def render_watchlist(
         behind_count = int((watch_table["status"] == "Behind").sum())
         ahead_count = int((watch_table["status"] == "Ahead").sum())
         on_pace_count = int((watch_table["status"] == "On pace").sum())
-    def status_tile(col, glyph: str, label: str, value: int, accent: str = INK) -> None:
+    def status_tile(col, label: str, value: int, note: str, accent: str = INK) -> None:
         col.markdown(
             f'<div class="card kpi-card" style="margin-bottom:0">'
-            f'<div class="kpi-label"><span style="color:{accent}">{glyph}</span> {label}</div>'
+            f'<div class="kpi-label">{label}</div>'
             f'<div class="kpi-value" style="color:{accent}">{value:,}</div>'
+            f'<div class="kpi-delta">{note}</div>'
             f"</div>",
             unsafe_allow_html=True,
         )
 
     c1, c2, c3 = st.columns(3)
-    status_tile(c1, "●", "Behind pace", behind_count, accent=RED)
-    status_tile(c2, "◐", "On pace", on_pace_count)
-    status_tile(c3, "○", "Ahead of pace", ahead_count)
+    status_tile(c1, "Behind pace", behind_count, "worth a closer look", accent=RED)
+    status_tile(c2, "On pace", on_pace_count, "selling as expected")
+    status_tile(c3, "Ahead", ahead_count, "selling faster than usual")
 
 
 # ---------------------------------------------------------------------------
@@ -968,7 +1094,7 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
             mode="lines",
             line=dict(width=0),
             fillcolor=BAND,
-            name="Historic IQR (p25–p75)",
+            name="Typical range for most shows",
             hoverinfo="skip",
         )
     )
@@ -980,8 +1106,8 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
             y=global_curve["median_pct"],
             mode="lines",
             line=dict(color=INK, width=2),
-            name="Historic median",
-            hovertemplate="Day %{x}: %{y:.1f}%<extra></extra>",
+            name="Typical pace",
+            hovertemplate="%{x} days before the show: %{y:.0f}% sold<extra></extra>",
         )
     )
 
@@ -993,13 +1119,13 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
                 y=current_curve["cum_pct"],
                 mode="lines",
                 line=dict(color=GRAY_SERIES, width=2, dash="dash"),
-                name="Current selection",
-                hovertemplate="Day %{x}: %{y:.1f}%<extra></extra>",
+                name="Your upcoming shows",
+                hovertemplate="%{x} days before the show: %{y:.0f}% sold<extra></extra>",
             )
         )
 
     # D-30 and D-7 checkpoint lines
-    for d, label in [(30, "D-30"), (7, "D-7")]:
+    for d, label in [(30, "30 days out"), (7, "1 week out")]:
         fig.add_vline(
             x=d,
             line_dash="dot",
@@ -1020,7 +1146,7 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
 
     # Y axis 0-100%
     fig.update_yaxes(
-        title_text="Cumulative % of tickets sold (of final)",
+        title_text="Share of the show's final ticket sales",
         range=[0, 105],
         ticksuffix="%",
         tickformat=".0f",
@@ -1029,7 +1155,7 @@ def booking_window_fig(global_curve: pd.DataFrame, current_curve: pd.DataFrame |
 
     # X axis inverted: 120 → 0
     fig.update_xaxes(
-        title_text="Days before event (120 → 0)",
+        title_text="Days before the show",
         autorange="reversed",
         range=[pacing.D_MAX, 0],
         dtick=15,
@@ -1149,16 +1275,16 @@ def sales_heatmap_fig_new(df: pd.DataFrame) -> go.Figure | None:
     fig.update_layout(
         template="plotly_white",
         title="",
-        coloraxis_colorbar_title="Share of sales",
+        coloraxis_colorbar_title="Share of<br>all sales",
         coloraxis_colorbar_tickformat=".0%",
         margin=dict(l=10, r=10, t=20, b=10),
     )
     fig.update_traces(
-        hovertemplate="Weekday: %{y}<br>Lead bucket: %{x}<br>Share: %{z:.1%}<extra></extra>",
+        hovertemplate="Bought on %{y}, %{x} days ahead<br>%{z:.1%} of all sales<extra></extra>",
         texttemplate="",
     )
-    fig.update_yaxes(title="Weekday")
-    fig.update_xaxes(title="Lead bucket (days before event)")
+    fig.update_yaxes(title="Day the ticket was bought")
+    fig.update_xaxes(title="How far ahead the ticket was bought (days)")
     return fig
 
 
@@ -1182,7 +1308,7 @@ TOP_K_TYPES = 12  # top event types by combined volume
 
 def _periodize(df: pd.DataFrame) -> pd.DataFrame:
     d = df.dropna(subset=["sale_date", "event_date", "qty_sold"]).copy()
-    d["period"] = np.where(d["sale_date"] < COVID_SPLIT, "Pre-COVID", "Post-COVID")
+    d["period"] = np.where(d["sale_date"] < COVID_SPLIT, "Before COVID", "After COVID")
     return d
 
 
@@ -1226,7 +1352,7 @@ def avg_tickets_per_event_by_type(df: pd.DataFrame) -> pd.DataFrame:
     # Ensure both periods exist per type
     all_types = g["_etype"].unique().tolist()
     full = (
-        pd.MultiIndex.from_product([all_types, ["Pre-COVID", "Post-COVID"]], names=["_etype", "period"])
+        pd.MultiIndex.from_product([all_types, ["Before COVID", "After COVID"]], names=["_etype", "period"])
         .to_frame(index=False)
         .merge(g, on=["_etype", "period"], how="left")
         .fillna({"n_events": 0, "total_tickets": 0})
@@ -1261,7 +1387,7 @@ def avg_tickets_fig(df: pd.DataFrame) -> tuple[go.Figure | None, bool]:
 
     # labels and category order
     by_type["_etype_label"] = by_type["_etype"]
-    by_type["bar_label"] = "n=" + by_type["n_events"].astype(int).astype(str)
+    by_type["bar_label"] = by_type["n_events"].astype(int).astype(str) + " shows"
 
     fig = px.bar(
         by_type,
@@ -1270,9 +1396,9 @@ def avg_tickets_fig(df: pd.DataFrame) -> tuple[go.Figure | None, bool]:
         color="period",
         barmode="group",
         text="bar_label",
-        labels={"_etype_label": "Event type", "avg_tickets_per_event": "Avg tickets per event"},
-        category_orders={"period": ["Pre-COVID", "Post-COVID"]},
-        color_discrete_map={"Pre-COVID": GRAY_SERIES, "Post-COVID": INK},
+        labels={"_etype_label": "Ticket code", "avg_tickets_per_event": "Average audience per show"},
+        category_orders={"period": ["Before COVID", "After COVID"]},
+        color_discrete_map={"Before COVID": GRAY_SERIES, "After COVID": INK},
     )
     fig.update_traces(textposition="outside", cliponaxis=False)
     fig.update_layout(
@@ -1286,7 +1412,7 @@ def avg_tickets_fig(df: pd.DataFrame) -> tuple[go.Figure | None, bool]:
     # Detect if pre has no events in top types
     pre_missing = (by_type.query("period == 'Pre-COVID'")["n_events"] > 0).sum() == 0
     if pre_missing:
-        fig.update_layout(title="Only Post-COVID events are visible under current filters. Broaden seasons/date range to see Pre-COVID.")
+        fig.update_layout(title="Only shows from after COVID appear in this view. Widen the show date range to include earlier ones.")
 
     return fig, pre_missing
 
@@ -1383,17 +1509,17 @@ def sales_heatmap_fig(heat_df: pd.DataFrame) -> go.Figure | None:
     )
     fig.update_layout(
         template="plotly_white",
-        coloraxis_colorbar_title="% of weekday tickets",
+        coloraxis_colorbar_title="Share of<br>that day's sales",
         coloraxis_colorbar_tickformat=".0%",
         title="",
     )
     # Numbers on hover only
     fig.update_traces(
-        hovertemplate="Weekday: %{y}<br>Lead bucket: %{x}<br>Share: %{z:.1%}<extra></extra>",
+        hovertemplate="Bought on %{y}, %{x} days ahead<br>%{z:.1%} of all sales<extra></extra>",
         texttemplate="",
     )
-    fig.update_yaxes(title="Weekday")
-    fig.update_xaxes(title="Lead bucket (days before event)")
+    fig.update_yaxes(title="Day the ticket was bought")
+    fig.update_xaxes(title="How far ahead the ticket was bought (days)")
     return fig
 
 
@@ -1418,7 +1544,7 @@ def checkpoint_summary(table: pd.DataFrame, target_day: int, tolerance: int = 5)
     gap = actual - median
 
     return {
-        "label": f"D-{target_day}",
+        "label": f"{target_day} days",
         "actual": actual,
         "median": median,
         "gap": gap,
@@ -1427,27 +1553,26 @@ def checkpoint_summary(table: pd.DataFrame, target_day: int, tolerance: int = 5)
 
 
 def render_checkpoint_cards(table: pd.DataFrame) -> None:
-    st.subheader("Early / Late Checkpoints")
+    st.subheader("Checkpoints before the show")
 
     summaries = [checkpoint_summary(table, 30), checkpoint_summary(table, 7)]
     valid = [s for s in summaries if s is not None]
 
     if not valid:
-        st.info("Not enough upcoming events to compute early/late checkpoints.")
+        st.info("Not enough upcoming shows to work out checkpoints.")
         return
 
     cols = st.columns(len(valid))
     for col, summary in zip(cols, valid):
         status = summary["status"]
 
-        badge_color = "🟢" if status == "Ahead" else "🟡" if status == "On pace" else "🔴"
-
         col.metric(
-            f"{summary['label']} cumulative %",
-            _format_percent(summary["actual"]),
-            f"{summary['gap']:+.1f} pp vs typical",
+            f"{summary['label']} before the show",
+            _format_percent(summary["actual"], decimals=0),
+            f"{summary['gap']:+.0f} vs usual",
+            delta_color="off",
         )
-        col.caption(f"{badge_color} Status: {summary['status']} ({summary['gap']:+.1f} percentage points)")
+        col.caption(f"{status} — usually {summary['median']:.0f}% sold by this point")
 
 
 # ---------------------------------------------------------------------------
@@ -1459,7 +1584,7 @@ def render_plot(title: str, fig: go.Figure | None, key: str, subtitle: str | Non
         st.caption(subtitle)
 
     if fig is None or not fig.data:
-        st.info("Not enough data to render this visual.")
+        st.info("Not enough data to show this chart.")
         return
 
     st.plotly_chart(fig, use_container_width=True)
@@ -1471,7 +1596,7 @@ def render_plot(title: str, fig: go.Figure | None, key: str, subtitle: str | Non
         with open(png_path, "rb") as handle:
             png_bytes = handle.read()
         st.download_button(
-            "Download PNG",
+            "Download this chart as an image",
             data=png_bytes,
             file_name=f"{key}.png",
             mime="image/png",
@@ -1492,24 +1617,24 @@ def main() -> None:
     render_hero(DEFAULT_DATA_PATH)
 
     # Data source - clearer UI for preloaded data + optional updates
-    st.sidebar.header("Data Source")
+    st.sidebar.header("Data")
     
     # Check if preloaded data exists
     has_preloaded = DEFAULT_DATA_PATH.exists()
     
     if has_preloaded:
         st.sidebar.success("**Data preloaded** — ready to explore.")
-        st.sidebar.caption("Using: `sales_2016_2026_combined.csv`")
+        st.sidebar.caption("File: sales_2016_2026_combined.csv")
         
         # Expander for optional update
-        with st.sidebar.expander("Upload updated data (optional)"):
-            st.markdown("Upload a new CSV to replace the current dataset. "
-                       "The file should have the same columns.")
-            uploaded_sidebar = st.file_uploader("Drop new CSV here", type=["csv"], key="csv_upload")
+        with st.sidebar.expander("Use a newer file instead"):
+            st.markdown("Upload a newer sales export to use instead. "
+                       "It needs the same columns as the current file.")
+            uploaded_sidebar = st.file_uploader("Choose a file", type=["csv"], key="csv_upload")
     else:
         st.sidebar.warning("No data file found")
-        st.sidebar.markdown("Upload your sales CSV to get started:")
-        uploaded_sidebar = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="csv_upload")
+        st.sidebar.markdown("Upload a sales export to get started:")
+        uploaded_sidebar = st.sidebar.file_uploader("Choose a file", type=["csv"], key="csv_upload")
     
     # Hidden local path input (for advanced users)
     local_path = str(DEFAULT_DATA_PATH)
@@ -1541,26 +1666,27 @@ def main() -> None:
     sale_max = df["sale_date"].max() if "sale_date" in df.columns else None
     
     st.sidebar.divider()
-    st.sidebar.subheader("As-of date")
+    st.sidebar.subheader("Reporting date")
     asof_date = st.sidebar.date_input(
-        "Evaluate pacing as of",
+        "Count ticket sales through",
         value=default_asof.date(),
-        help="Set the 'current' date for pacing analysis. Useful to time-travel with historical data. Last updated sale date on merged csv: 10/29/2025",
+        help="Treat this as 'today'. Sales after this date are ignored, so you can "
+             "look back at how things stood on an earlier date.",
     )
     asof_ts = pd.Timestamp(asof_date).normalize()
-    
+
     # Data stamp
-    data_stamp = f"**Data source:** {source_label}"
+    data_stamp = ""
     if sale_min and sale_max:
-        data_stamp += f" • Sales from {sale_min:%b %d, %Y} to {sale_max:%b %d, %Y}"
-    data_stamp += f" • **As-of:** {asof_ts:%b %d, %Y}"
-    data_stamp += f" • Rows: {len(df):,}"
+        data_stamp += f"Ticket sales from {sale_min:%B %Y} through {sale_max:%B %d, %Y}. "
+    data_stamp += f"Counting sales through **{asof_ts:%B %d, %Y}**. "
+    data_stamp += f"{len(df):,} sales records."
     st.caption(data_stamp)
 
     # Filters
     filtered_df, filters, filters_summary = sidebar_filters(df)
     if filtered_df.empty:
-        st.warning("No rows match the current filters. Try broadening your selection.")
+        st.warning("No sales match the current date range. Try widening it.")
         return
 
     # Derive aggregates
@@ -1588,7 +1714,7 @@ def main() -> None:
     with col_dl:
         st.markdown('<div class="ghost-btn">', unsafe_allow_html=True)
         st.download_button(
-            "Download snapshot",
+            "Download this data as a spreadsheet",
             data=csv_bytes,
             file_name="krannert_filtered.csv",
             mime="text/csv",
@@ -1596,25 +1722,31 @@ def main() -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
     with col_note:
-        st.markdown('<div class="muted">Exports respect your current filters and as-of date.</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="muted">The download matches the date range and reporting date you have set.</div>',
+            unsafe_allow_html=True,
+        )
+
+    render_price_code_guide(df)
 
     # --- 1) Event Pacing Watchlist (move back up) ---
-    st.subheader(f"1) Event Pacing Watchlist (as of {asof_ts:%B %d, %Y})")
+    st.subheader("Which upcoming shows need attention?")
     st.caption(
-        "Statuses reflect the current filters on upcoming events; change filters to focus the watchlist. "
-        "Baseline pacing chart uses a global historical curve for stability."
+        f"Ticket sales are counted through {asof_ts:%B %d, %Y}. Each show is compared with "
+        "similar shows from past seasons at the same point before their date."
     )
     render_watchlist(watch_table, fallback_tiers, filters_summary, watch_summary)
 
     # --- 2) Booking Window Pacing ---
-    st.subheader("2) Booking Window Pacing")
+    st.subheader("When do people buy their tickets?")
     with st.expander("How to read"):
         st.markdown(
-            "Typical booking curve across your current filters. If your selection sits below the median at a given day-out, you’re behind pace.\n\n"
-            "- X-axis: days before the event (counts down 120 → 0)\n"
-            "- Y-axis: % of a typical final audience already sold\n"
-            "- Blue line = typical pace; shaded = typical range\n"
-            "- If your selection sits below the line at a given day-out, you’re behind pace."
+            "This shows how ticket sales usually build in the four months before a show.\n\n"
+            "- Read right to left: the show date is at the far right.\n"
+            "- The **black line** is the typical pace across past shows.\n"
+            "- The **shaded band** is the range most shows fall inside.\n"
+            "- The **dashed line** is your upcoming shows. When it sits below the black line, "
+            "those shows are selling slower than usual for that point in time."
         )
 
     mode = "Global"
@@ -1622,19 +1754,19 @@ def main() -> None:
     current_curve = build_current_curve(filtered_df, asof_ts)
 
     if baseline_curve is None or baseline_curve.empty:
-        st.info("Not enough data to render the pacing curve.")
+        st.info("Not enough past sales to show a typical booking pattern.")
     else:
         plotly_config = {"displaylogo": False, "modeBarButtonsToRemove": ["toImage"]}
         pacing_fig = style_mono(booking_window_fig(baseline_curve, current_curve))
         st.plotly_chart(pacing_fig, use_container_width=True, config=plotly_config)
         st.caption(
-            f"Baseline: **Global** (n = {cohort_n:,} past events, stable across filters). "
-            "Dashed line = current filtered upcoming events (shown only if ≥3 upcoming events)."
+            f"The typical pace is based on {cohort_n:,} past shows. "
+            "The dashed line appears when at least three of your upcoming shows have sales."
         )
 
     # --- 3) Sales Timing Heatmap (directly under booking) ---
-    st.subheader("3) Sales Timing Heatmap")
-    st.caption("Share of weekly sales by weekday × lead bucket. Darker = more of your sales tend to happen there.")
+    st.subheader("How far ahead do people book?")
+    st.caption("Darker squares are where most ticket sales happen. Rows are the day of the week the ticket was bought; columns are how far ahead of the show it was bought.")
     no_zoom_config = {
         "displaylogo": False,
         "modeBarButtonsToRemove": [
@@ -1651,18 +1783,18 @@ def main() -> None:
 
     fig_heat = sales_heatmap_fig_new(filtered_df)
     if fig_heat is None:
-        st.info("Not enough data to show pattern. Try widening seasons or channels.")
+        st.info("Not enough sales in this view to show a booking pattern. Try widening the date range.")
     else:
         style_mono(fig_heat)
         st.plotly_chart(fig_heat, use_container_width=True, config=no_zoom_config)
 
     # --- 4) Event Categories: Pre vs Post COVID ---
-    st.subheader("4) Event Categories: Pre vs Post COVID")
-    st.caption("Average audience size per category before vs after COVID (based on sale date). Pre = Sales Before 03/01/2020; Post = Sales After 07/01/2021.")
+    st.subheader("Which kinds of shows recovered after COVID?")
+    st.caption("Total tickets sold by category. \"Before\" covers sales up to March 2020; \"after\" covers sales from July 2021 onward.")
     with st.expander("How to read"):
         st.markdown(
-            "- Compare category strength before and after COVID.\n"
-            "- Bars show attendance; use to spot recovering or declining categories."
+            "Compare each category's ticket sales before and after the shutdown. "
+            "A much shorter bar on the right means that category has not brought its audience back yet."
         )
     plotly_config = no_zoom_config
     cat_pre = fig_categories_pre(df)
@@ -1671,30 +1803,30 @@ def main() -> None:
     cols_cat = st.columns(2)
     with cols_cat[0]:
         if cat_pre is None:
-            st.info("No pre-COVID data to render.")
+            st.info("No sales from before COVID in this view.")
         else:
             style_mono(cat_pre)
             st.plotly_chart(cat_pre, use_container_width=True, config=plotly_config)
     with cols_cat[1]:
         if cat_post is None:
-            st.info("No post-COVID data to render.")
+            st.info("No sales from after COVID in this view.")
         else:
             style_mono(cat_post)
             st.plotly_chart(cat_post, use_container_width=True, config=plotly_config)
 
-    st.markdown("**Top categories Pre vs Post COVID (Top 6)**")
+    st.markdown("**The six biggest categories, side by side**")
     if cat_compare is None:
-        st.info("No data for category comparison.")
+        st.info("Not enough data to compare categories.")
     else:
         style_mono(cat_compare)
         st.plotly_chart(cat_compare, use_container_width=True, config=plotly_config)
 
     # --- 5) Top Events: Pre vs Post COVID ---
-    st.subheader("5) Top Events: Pre vs Post COVID")
-    st.caption("Shared events present in both periods, showing tickets pre vs post COVID.")
+    st.subheader("How did returning shows do?")
+    st.caption("Shows that ran both before and after the shutdown, so the two periods are directly comparable.")
     ev_compare = fig_top_events_pre_post(df, k=12)
     if ev_compare is None:
-        st.info("No events found in both periods.")
+        st.info("No shows ran in both periods, so there is nothing to compare.")
     else:
         style_mono(ev_compare)
         st.plotly_chart(ev_compare, use_container_width=True, config=plotly_config)

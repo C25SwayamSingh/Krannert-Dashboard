@@ -39,38 +39,29 @@ DEFAULT_COHORT_TIERS: List[List[str]] = [
 ]
 
 TIER_LABELS = {
-    "event_type|weekday|venue": "Type+Weekday+Venue",
-    "event_type|weekday": "Type+Weekday",
-    "event_type": "Type only",
-    "all": "All events (global)",
+    "event_type|weekday|venue": "same price category and weekday",
+    "event_type|weekday": "same price category and weekday",
+    "event_type": "same price category",
+    "all": "all past shows",
 }
 
 
 def _format_cohort_label(tier: str, n: int, row: pd.Series) -> str:
     """
-    Format a human-readable cohort label with context.
-    Examples:
-      - Type+Weekday+Venue (n=45): Theatre · Saturday · Main Hall
-      - Type+Weekday (n=32): Theatre · Saturday
-      - Type only (n=120): Theatre
-      - All events (global) (n=500)
+    Describe the comparison group in a plain sentence, e.g.
+      - "143 past Thursday shows, UI tickets"
+      - "56 past shows, UI tickets"
+      - "1,293 past shows (all types)"
     """
-    base_label = TIER_LABELS.get(tier, tier)
-    
-    if tier == "event_type|weekday|venue":
-        event_type = row.get("event_type", "Unknown")
-        weekday = row.get("weekday", "Unknown")
-        venue = row.get("venue", "Unknown")
-        return f"{base_label} (n={n}): {event_type} · {weekday} · {venue}"
-    elif tier == "event_type|weekday":
-        event_type = row.get("event_type", "Unknown")
-        weekday = row.get("weekday", "Unknown")
-        return f"{base_label} (n={n}): {event_type} · {weekday}"
-    elif tier == "event_type":
-        event_type = row.get("event_type", "Unknown")
-        return f"{base_label} (n={n}): {event_type}"
-    else:
-        return f"{base_label} (n={n})"
+    shows = "show" if n == 1 else "shows"
+    code = str(row.get("event_type", "") or "").strip().upper()
+    weekday = str(row.get("weekday", "") or "").strip()
+
+    if tier == "event_type|weekday|venue" or tier == "event_type|weekday":
+        return f"{n:,} past {weekday} {shows}, {code} tickets"
+    if tier == "event_type":
+        return f"{n:,} past {shows}, {code} tickets"
+    return f"{n:,} past {shows} (all types)"
 
 
 def _prep(df: pd.DataFrame, today: Optional[pd.Timestamp] = None) -> pd.DataFrame:
